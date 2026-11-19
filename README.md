@@ -1,8 +1,8 @@
 # Ironline ERP
 
 Shop-management software for job shops and manufacturers: quoting, sales orders, jobs,
-and (by the roadmap) scheduling, shop floor, inventory, purchasing, quality, shipping,
-invoicing, reports and an AI assistant. Multi-tenant SaaS: many shops share one
+shop floor, scheduling, quality, inventory, purchasing and reports, with shipping,
+invoicing and an AI assistant on the roadmap. Multi-tenant SaaS: many shops share one
 installation, each sees only its own data.
 
 "Ironline" is a working name; change it in `packages/shared/src/brand.ts`.
@@ -31,7 +31,7 @@ npm run dev                     # API on :4100, web app on http://127.0.0.1:5180
 
 Checks:
 ```bash
-npm test                        # pricing unit tests + API tests on ironline_test
+npm test                        # shared unit tests + API tests on ironline_test
 npm run typecheck
 npm run build                   # production web build in apps/web/dist
 ```
@@ -40,7 +40,7 @@ npm run build                   # production web build in apps/web/dist
 ```
 apps/api        Fastify + Drizzle + PostgreSQL (services hold the business rules)
 apps/web        React + Vite + Tailwind single-page app
-packages/shared Validation schemas and the quote pricing formula used by both
+packages/shared Validation schemas and shared maths (pricing, tolerances, purchase planning, reports)
 ```
 
 ## Status
@@ -57,11 +57,20 @@ packages/shared Validation schemas and the quote pricing formula used by both
 - **Shop floor:** work-center queues; operator screen with setup/run/labor timers, good and
   scrap counts, material pick and return, operation hand-off; live actual cost on the job
 - **Schedule board:** a column per work center with backlog hours, clear-by date and job cards
+- **Quality:** numbered balloons on part drawings (PDF/image), tolerances and sampling per
+  routing step; operators record readings on the floor; Cpk and spread per job; printable
+  first-article inspection report; shop-wide quality page
+- **Inventory:** lots and locations, receiving with material certificates, FIFO picking that
+  costs jobs from lot costs, remnants, adjust and move, transaction history, traceability,
+  spreadsheet (CSV) stock take
+- **Purchasing:** buying plan from job demand, stock and reorder points; vendor baskets into
+  purchase orders; receiving into lots; vendors with lead times and prices
+- **Reports:** charts and tables over sales, jobs, quotes, labor, inspection, stock and
+  purchases; saved reports; pin to the home dashboard
 - Light and dark themes, phone and tablet layouts
 
 See `docs/FEATURES.md` for the full checklist and `docs/ROADMAP.md` for the order of work.
-Next: inventory with stock locations and lots, purchasing and receiving, quality
-(ballooned drawings, inspections, NCR), shipping and invoicing.
+Next: shipping, invoicing, non-conformance reports and nesting.
 
 ## Third-party notices
 STEP/IGES/BREP files are read in the browser by `occt-import-js` (LGPL-2.1, built on Open

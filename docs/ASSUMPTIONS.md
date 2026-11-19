@@ -27,6 +27,8 @@ adapts.
     reliable PDF/vector text extraction and is left for later.
 11. **Balloons link to routing steps by step number** (10, 20, 30…), because routing rows
     are rewritten when a part is saved. If the routing is reordered, check the plan's steps.
+    A balloon with no step, or a step the job does not have, is checked at the job's last
+    operation.
 12. **Each job keeps a copy of the plan** made when the job is created. Later plan edits do
     not change existing jobs. A job made before its part had a plan can take the plan from
     its Quality tab, until the first reading is saved; after that the job's plan is locked.
@@ -47,7 +49,9 @@ adapts.
     first; anything left is an untracked return that does not add stock.
 20. **Remnants** come off the job's picked quantity and become a new lot that keeps the
     parent lot's cost, heat number, supplier and certificate. Size is free text; quantity is
-    in the material's own unit (e.g. inches of bar, square feet of sheet).
+    in the material's own unit (e.g. inches of bar, square feet of sheet). The remnant takes
+    the details of the newest lot the job line drew from; if a job mixed lots, check the heat
+    number on the remnant.
 21. **Receiving does not change a part's standard cost** (quotes keep using it). Lot cost is
     used for inventory value and job actual cost.
 22. **Stock take uses CSV, not Excel files.** Rows are matched by lot id; a lot whose

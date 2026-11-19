@@ -16,6 +16,10 @@ const WORKER = fileURLToPath(new URL("../workers/cad-preview.mjs", import.meta.u
 const CAD_EXT = /\.(step|stp|iges|igs|brep)$/i;
 /** A CAD file this large or larger would need too long; anything up to the upload limit is fine. */
 const TIMEOUT_MS = 20 * 60 * 1000;
+/** Heap ceiling for one conversion; large assemblies fit, runaway files are stopped. */
+const WORKER_MEMORY_MB = Number(process.env.PREVIEW_WORKER_MEMORY_MB ?? 3072);
+/** Messages the worker may print that are safe and useful to show to users. */
+const KNOWN_ERRORS = ["This CAD file could not be read. Try exporting it again as STEP AP214 or AP242."];
 
 export const needsPreview = (fileName: string) => CAD_EXT.test(fileName);
 export const previewPath = (uploadDir: string, storageKey: string) => join(uploadDir, `${storageKey}.glb`);
@@ -31,15 +35,23 @@ export function createPreviewQueue(db: Db, uploadDir: string, log: (msg: string)
       let err = "";
       const child = fork(WORKER, [join(uploadDir, job.storageKey), previewPath(uploadDir, job.storageKey)], {
         stdio: ["ignore", "ignore", "pipe", "ipc"],
-        // Plain Node: the worker is JavaScript, so the dev server's TypeScript loader is not needed.
-        execArgv: [],
+        // Plain Node (the worker is JavaScript) with a memory ceiling, so one huge or hostile
+        // upload cannot exhaust the server; and only the environment it needs.
+        execArgv: [`--max-old-space-size=${WORKER_MEMORY_MB}`],
+        env: { PATH: process.env.PATH ?? "", NODE_ENV: process.env.NODE_ENV ?? "production" },
       });
-      child.stderr?.on("data", (d: Buffer) => (err += d.toString()));
+      // Keep only the tail of stderr; it goes to the server log, never to users as-is.
+      child.stderr?.on("data", (d: Buffer) => (err = (err + d.toString()).slice(-4000)));
       const timer = setTimeout(() => child.kill("SIGKILL"), TIMEOUT_MS);
       child.on("exit", (code, signal) => {
         clearTimeout(timer);
         if (code === 0) resolve();
-        else reject(new Error(signal === "SIGKILL" ? "Preparing the 3D view took too long" : err.trim().split("\n").pop() || "Preparing the 3D view failed"));
+        else {
+          const last = err.trim().split("\n").pop() ?? "";
+          // Users only ever see one of these fixed messages; the raw output stays in the log.
+          const shown = signal === "SIGKILL" ? "Preparing the 3D view took too long" : KNOWN_ERRORS.find((m) => last === m) ?? "Preparing the 3D view failed";
+          reject(Object.assign(new Error(shown), { detail: err.trim().slice(-1000) }));
+        }
       });
     });
 
@@ -57,7 +69,7 @@ export function createPreviewQueue(db: Db, uploadDir: string, log: (msg: string)
           await rm(`${previewPath(uploadDir, job.storageKey)}.part`, { force: true });
           // The file may have been deleted while it was being prepared; that is not an error.
           await db.update(attachments).set({ previewStatus: "failed", previewError: (e as Error).message.slice(0, 300) }).where(eq(attachments.id, job.id));
-          log(`3D preview failed for ${job.id}: ${(e as Error).message}`);
+          log(`3D preview failed for ${job.id}: ${(e as Error).message}${(e as { detail?: string }).detail ? ` — ${(e as { detail?: string }).detail}` : ""}`);
         }
       }
     } finally {

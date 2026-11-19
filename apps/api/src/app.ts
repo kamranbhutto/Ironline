@@ -345,6 +345,7 @@ export function buildApp(db: Db, opts: { logger?: boolean; secureCookies?: boole
   app.post(`${api}/reports`, async (req, reply) => reply.status(201).send(await reportsSvc.saveReport(db, ctxOf(req), parse(reportsSvc.reportSchema, req.body))));
   app.get(`${api}/reports/:id`, async (req) => reportsSvc.getReport(db, ctxOf(req), parse(idParam, req.params).id));
   app.put(`${api}/reports/:id`, async (req) => reportsSvc.saveReport(db, ctxOf(req), parse(reportsSvc.reportSchema, req.body), parse(idParam, req.params).id));
+  app.patch(`${api}/reports/:id`, async (req) => reportsSvc.setFlags(db, ctxOf(req), parse(idParam, req.params).id, parse(reportsSvc.flagsSchema, req.body)));
   app.delete(`${api}/reports/:id`, async (req, reply) => (await reportsSvc.deleteReport(db, ctxOf(req), parse(idParam, req.params).id), reply.status(204).send()));
 
   return app;

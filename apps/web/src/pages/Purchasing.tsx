@@ -594,7 +594,7 @@ const PO_STAGES = [
   { key: "received", label: "Received" },
 ];
 
-type LineForm = { itemId: string; description: string; quantity: string; unitCost: string; dueDate: string };
+type LineForm = { itemId: string; description: string; quantity: string; unitCost: string; dueDate: string; free?: boolean };
 
 export function PurchaseOrderPage() {
   const { id = "" } = useParams();
@@ -614,7 +614,7 @@ export function PurchaseOrderPage() {
     if (!d) return;
     setVendorId(d.vendor.id);
     setNotes(d.notes ?? "");
-    setLines(d.lines.map((l) => ({ itemId: l.itemId ?? "", description: l.itemId ? "" : l.description, quantity: String(l.quantity), unitCost: String(l.unitCost), dueDate: l.dueDate ?? "" })));
+    setLines(d.lines.map((l) => ({ itemId: l.itemId ?? "", description: l.itemId ? "" : l.description, quantity: String(l.quantity), unitCost: String(l.unitCost), dueDate: l.dueDate ?? "", free: !l.itemId })));
     setEditing(true);
   };
   const refresh = (x: PoDetail) => {
@@ -626,7 +626,7 @@ export function PurchaseOrderPage() {
   };
   const save = useMutation({
     mutationFn: () => {
-      const body = { vendorId, notes: notes || null, lines: lines.filter((l) => l.itemId || l.description).map((l) => ({ itemId: l.itemId || null, description: l.description || null, quantity: Number(l.quantity), unitCost: Number(l.unitCost) || 0, dueDate: l.dueDate || null })) };
+      const body = { vendorId, notes: notes || null, lines: lines.filter((l) => l.itemId || l.description.trim()).map((l) => ({ itemId: l.free ? null : l.itemId || null, description: l.description.trim() || null, quantity: Number(l.quantity), unitCost: Number(l.unitCost) || 0, dueDate: l.dueDate || null })) };
       return isNew ? api<PoDetail>("/purchase-orders", "POST", body) : api<PoDetail>(`/purchase-orders/${id}`, "PUT", body);
     },
     onSuccess: (x) => (refresh(x), setEditing(false), isNew && nav(`/purchasing/orders/${x.id}`, { replace: true })),
@@ -724,7 +724,7 @@ export function PurchaseOrderPage() {
               {lines.map((l, i) => (
                 <div key={i} className="grid grid-cols-[minmax(0,2fr)_100px_110px_150px_32px] items-end gap-2">
                   <Field label={i === 0 ? "Item or description" : ""}>
-                    {l.itemId || !l.description ? (
+                    {!l.free ? (
                       <Select value={l.itemId} onChange={(e) => setLine(i, "itemId", e.target.value)}>
                         <option value="">Choose an item…</option>
                         {(itemsQ.data ?? [])
@@ -736,7 +736,7 @@ export function PurchaseOrderPage() {
                           ))}
                       </Select>
                     ) : (
-                      <Input value={l.description} onChange={(e) => setLine(i, "description", e.target.value)} />
+                      <Input value={l.description} placeholder="e.g. Saw blades, outside heat treat" onChange={(e) => setLine(i, "description", e.target.value)} />
                     )}
                   </Field>
                   <Field label={i === 0 ? "Quantity" : ""}>
@@ -757,7 +757,7 @@ export function PurchaseOrderPage() {
                 <Button onClick={() => setLines([...lines, { itemId: "", description: "", quantity: "", unitCost: "", dueDate: "" }])}>
                   <Plus className="h-4 w-4" /> Item line
                 </Button>
-                <Button variant="ghost" onClick={() => setLines([...lines, { itemId: "", description: " ", quantity: "", unitCost: "", dueDate: "" }])}>
+                <Button variant="ghost" onClick={() => setLines([...lines, { itemId: "", description: "", quantity: "", unitCost: "", dueDate: "", free: true }])}>
                   <Plus className="h-4 w-4" /> Free-text line
                 </Button>
                 <span className="num ml-auto text-lg font-semibold">{money(total)}</span>

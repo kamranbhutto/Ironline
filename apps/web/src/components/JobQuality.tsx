@@ -14,7 +14,7 @@ import { Badge, Button, cx, ErrorNote, Loading } from "./ui.tsx";
 const resultsFor = (results: InspectionResult[], id: string) => results.filter((r) => r.characteristicId === id).sort((a, b) => b.piece - a.piece);
 const limitText = (c: JobCharacteristic) =>
   c.kind === "note" ? "Pass / fail" : `${c.lower == null ? "no min" : nominalText({ ...c, nominal: c.lower })} – ${c.upper == null ? "no max" : nominalText({ ...c, nominal: c.upper })}`;
-const opText = (c: JobCharacteristic) => (c.operation ? `${c.operation.sequence} ${c.operation.workCenter ?? ""}`.trim() : "Final");
+const opText = (c: JobCharacteristic) => (c.operation ? `${c.operation.sequence} ${c.operation.workCenter ?? ""}`.trim() : "Any step");
 /** A reading shown with at least as many decimals as the limits ("1.250", not "1.25"). */
 export const readingText = (c: JobCharacteristic, v: number) => {
   const want = nominalText(c).split(".")[1]?.length ?? 0;

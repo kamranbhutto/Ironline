@@ -63,7 +63,7 @@ const DATASETS: Dataset[] = [
       { key: "estimated_cost", label: "Estimated cost", type: "money" },
       { key: "actual_cost", label: "Actual cost", type: "money" },
       { key: "revenue", label: "Revenue", type: "money" },
-      { key: "margin", label: "Margin (revenue − actual)", type: "money" },
+      { key: "margin", label: "Margin so far (revenue − actual cost)", type: "money" },
     ],
     query: (org) => sql`
       select j.number as job_number, coalesce(c.name, 'Stock') as customer, coalesce(i.part_number, 'One-off') as part_number, j.status,
@@ -264,4 +264,14 @@ export async function deleteReport(db: Db, ctx: Ctx, id: string) {
 
 export async function pinnedReports(db: Db, ctx: Ctx) {
   return db.select().from(reports).where(and(eq(reports.orgId, ctx.orgId), eq(reports.pinned, true))).orderBy(desc(reports.updatedAt)).limit(6);
+}
+
+export const flagsSchema = z.object({ starred: z.boolean().optional(), pinned: z.boolean().optional() });
+
+/** Star or pin without touching the report's views (used from the list). */
+export async function setFlags(db: Db, ctx: Ctx, id: string, input: z.infer<typeof flagsSchema>) {
+  if (ctx.role === "viewer") throw badRequest("Your role can read reports but not change them");
+  const [r] = await db.update(reports).set({ ...input, updatedAt: new Date(), updatedBy: ctx.userId }).where(and(eq(reports.orgId, ctx.orgId), eq(reports.id, id))).returning({ id: reports.id });
+  if (!r) throw notFound("Report");
+  return r;
 }

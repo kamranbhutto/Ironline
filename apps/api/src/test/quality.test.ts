@@ -44,6 +44,8 @@ describe("quality", () => {
     const [dia, note] = insp.body.characteristics;
     expect(dia.due).toEqual([1, 5, 10]);
     expect(dia.operation.workCenter).toBe("Mill");
+    // The note has no step: it is checked at the job's last operation.
+    expect(note.operation.sequence).toBe(10);
     expect([dia.lower, dia.upper]).toEqual([11.98, 12.02]);
 
     // The server judges numbers itself, whatever the client claims.

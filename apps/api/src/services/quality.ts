@@ -179,7 +179,9 @@ export async function jobInspection(db: Db, ctx: Ctx, jobId: string) {
   const characteristics = chars.map((c) => {
     const mine = results.filter((r) => r.characteristicId === c.id);
     const values = mine.map((r) => r.value).filter((v): v is number => v != null);
-    const op = ops.find((o) => o.sequence === c.operationSeq);
+    // A balloon with no step, or a step this job does not have (its routing came from the
+    // quote), is checked at the job's last operation.
+    const op = ops.find((o) => o.sequence === c.operationSeq) ?? ops.at(-1);
     const due = piecesToCheck(c.sampling as Sampling, c.everyN, j.quantity);
     return {
       ...c,

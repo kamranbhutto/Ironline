@@ -10,7 +10,7 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, Line
 import { api } from "../api.ts";
 import { Badge, Button, cx, ErrorNote, Input, Loading, Modal, PageHeader, Select, Table, TabPanel, Td } from "../components/ui.tsx";
 import { money, num } from "../format.ts";
-import { AGG_LABEL, applyFilters, compute, PALETTE, toCsv, valueKey, valueLabel, type Agg, type Chart, type Column, type Result, type Row, type View } from "../report.ts";
+import { AGG_LABEL, applyFilters, compute, PALETTE, toCsv, valueKey, valueLabel, type Agg, type Chart, type Column, type Result, type Row, type View } from "@ironline/shared";
 
 type Dataset = { key: string; label: string; description: string; columns: Column[] };
 type DataRows = { columns: Column[]; rows: Row[]; truncated: boolean };
@@ -84,16 +84,12 @@ export function ReportsPage() {
     onSuccess: (r) => (qc.invalidateQueries({ queryKey: ["reports"] }), nav(`/reports/${r.id}`)),
   });
   const patch = useMutation({
-    mutationFn: (r: Saved) => api(`/reports/${r.id}`, "PUT", { name: r.name, dataset: r.dataset, config: r.config, starred: r.starred, pinned: r.pinned }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["reports"] }),
+    mutationFn: ({ id, ...flags }: { id: string; starred?: boolean; pinned?: boolean }) => api(`/reports/${id}`, "PATCH", flags),
+    onSuccess: (_d, v) => (qc.invalidateQueries({ queryKey: ["reports"] }), qc.invalidateQueries({ queryKey: ["report", v.id] }), qc.invalidateQueries({ queryKey: ["pinned-reports"] })),
   });
   const del = useMutation({ mutationFn: (id: string) => api(`/reports/${id}`, "DELETE"), onSuccess: () => qc.invalidateQueries({ queryKey: ["reports"] }) });
   const [confirmDel, setConfirmDel] = useState<Saved | null>(null);
-  const full = useQuery({ queryKey: ["reports-full", list.data?.map((r) => r.id).join()], queryFn: () => Promise.all((list.data ?? []).map((r) => api<Saved>(`/reports/${r.id}`))), enabled: !!list.data });
-  const toggle = (r: Saved, k: "starred" | "pinned") => {
-    const f = full.data?.find((x) => x.id === r.id);
-    if (f) patch.mutate({ ...f, [k]: !r[k] });
-  };
+  const toggle = (r: Saved, k: "starred" | "pinned") => patch.mutate({ id: r.id, [k]: !r[k] });
   return (
     <div className="space-y-5">
       <PageHeader
@@ -549,7 +545,7 @@ export function ReportEditorPage() {
             </PanelBlock>
           )}
 
-          <PanelBlock title="Filters" onAdd={() => setView({ filters: [...view.filters, { field: cols[0]?.key ?? "", op: "is", value: "" }] })}>
+          <PanelBlock title="Filters" onAdd={() => setView({ filters: [...view.filters, { field: view.groupBy?.field ?? cols.find((c) => c.type === "text")?.key ?? cols[0]?.key ?? "", op: "is", value: "" }] })}>
             {view.filters.map((fl, i) => {
               const t = cols.find((c) => c.key === fl.field)?.type ?? "text";
               const set = (p: Partial<typeof fl>) => setView({ filters: view.filters.map((y, j) => (j === i ? { ...y, ...p } : y)) });

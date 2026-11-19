@@ -18,10 +18,8 @@ export const useJobInspection = (jobId: string | undefined) =>
 /** Balloons for this step. Ones not tied to a step are checked at the last step. */
 export const stepCharacteristics = (insp: JobInspection | undefined, seq: number) => {
   if (!insp) return [];
-  const last = insp.operations.at(-1)?.sequence;
-  const steps = new Set(insp.operations.map((o) => o.sequence));
-  // A balloon whose step is not on this job (the job's routing came from the quote) is checked at the last step.
-  return insp.characteristics.filter((c) => (c.operationSeq != null && steps.has(c.operationSeq) ? c.operationSeq : last) === seq);
+  // The server says which operation checks each balloon (falling back to the last one).
+  return insp.characteristics.filter((c) => c.operation?.sequence === seq);
 };
 
 const resultOf = (results: InspectionResult[], charId: string, piece: number) => results.find((r) => r.characteristicId === charId && r.piece === piece);

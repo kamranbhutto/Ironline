@@ -35,7 +35,8 @@ export function applyFilters(rows: Row[], filters: View["filters"], cols: Column
     filters.every((f) => {
       const raw = r[f.field];
       const col = cols.find((c) => c.key === f.field);
-      if (!f.value && f.op !== "is") return true;
+      // A filter with nothing typed in yet does not hide anything.
+      if (!f.value) return true;
       const s = raw == null ? "" : String(raw);
       switch (f.op) {
         case "is":

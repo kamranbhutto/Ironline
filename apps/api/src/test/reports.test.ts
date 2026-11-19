@@ -28,6 +28,12 @@ describe("reports", () => {
     expect((await call("GET", "/reports/pinned")).body).toHaveLength(1);
     expect((await other.call("GET", `/reports/${saved.body.id}`)).status).toBe(404);
     expect((await other.call("GET", "/reports")).body).toHaveLength(0);
+    // Starring from the list keeps the pin and the views.
+    await call("PATCH", `/reports/${saved.body.id}`, { starred: true });
+    const after = await call("GET", `/reports/${saved.body.id}`);
+    expect(after.body).toMatchObject({ starred: true, pinned: true });
+    expect(after.body.config.views[0].name).toBe("By month");
+    expect((await other.call("PATCH", `/reports/${saved.body.id}`, { starred: true })).status).toBe(404);
     expect((await call("DELETE", `/reports/${saved.body.id}`)).status).toBe(204);
   });
 });
