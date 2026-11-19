@@ -1,0 +1,20 @@
+[
+ {"id": "01_intro", "text": "This video shows four parts of Ironline that turn a busy shop into a controlled one: quality, inventory, purchasing, and reports. Everything you see is live data from the demo shop."},
+ {"id": "02_plan", "text": "Quality starts on the part. Open the part's drawing, click Add balloons, and click each dimension you want checked. Every numbered balloon holds the target, the tolerance, the routing step where it is measured, how often to check it, and the gauge to use. Critical features get a star."},
+ {"id": "03_inspect", "text": "On the shop floor, the operator taps Inspect. The drawing fills the screen with the balloons due at this step, and the panel asks for one reading per balloon on this piece. A value outside the limits turns red the moment it is typed, before the part moves on."},
+ {"id": "04_history", "text": "Expand the panel to see every sampled piece so far. Missing checks are marked due, so nothing gets skipped."},
+ {"id": "05_job_quality", "text": "In the office, the job's Quality tab shows every balloon with its spread between the limits, its process capability, and the readings for each sampled piece. One reading on balloon four was out of tolerance, and it stands out in red."},
+ {"id": "06_report", "text": "The Report tab turns the same data into a first article inspection report, ready to print or save as a PDF for your customer."},
+ {"id": "07_quality_page", "text": "The Quality page gathers it all: readings this week, anything out of tolerance, the jobs being inspected, and which parts have an inspection plan."},
+ {"id": "08_inventory", "text": "Inventory shows what is on the shelves. For each material you see stock on hand, what is already on order, what open jobs still need, what is left, and its value. Filters show anything short for jobs, below its reorder point, or saved as a remnant."},
+ {"id": "09_item_stock", "text": "Open a material to see its lots. Each lot has a location, size, heat number, supplier and cost. Remnants cut on the floor keep their parent's heat number and certificate. The transactions tab lists every receipt, pick, return and adjustment, and certificates show which jobs each lot went into."},
+ {"id": "10_pick", "text": "When an operator picks material, the oldest lot is used first and the job is costed at that lot's real price. An off cut can go back on the shelf with Save remnant."},
+ {"id": "11_stock_take", "text": "Counting stock is three steps: download the sheet, fill in what you count, and load it back. Ironline shows every difference and its value before anything is saved."},
+ {"id": "12_plan", "text": "Purchasing starts with the buying plan. For every material it compares stock, open orders and job demand, then says how much to buy, from which vendor, and whether an order placed today can arrive in time."},
+ {"id": "13_supply", "text": "Click an item to see its expected supply over time, with the minimum level and the day an order would land. The vendors tab keeps lead times, prices and minimum orders, with one primary vendor."},
+ {"id": "14_basket", "text": "Type a quantity and click Add. Lines collect in a basket for each vendor, and Create order shows the arrival dates and total before saving a draft purchase order."},
+ {"id": "15_po", "text": "Purchase orders move from draft to sent to received. Receiving puts the material straight into stock as a new lot at the order price, so inventory and job costs stay correct."},
+ {"id": "16_reports", "text": "Reports let you chart anything the shop records: sales, jobs, quotes, labor, inspection readings, stock and purchases. Start from a ready made report, or build your own."},
+ {"id": "17_builder", "text": "Each report can hold several views. Pick a chart, choose what to total, group it by any column, split it into series, and add filters. The underlying data sits below, and everything exports to CSV."},
+ {"id": "18_outro", "text": "Pin a report and it appears live on the home dashboard. That is quality, inventory, purchasing and reports, all working from the same shop data. Thanks for watching."}
+]

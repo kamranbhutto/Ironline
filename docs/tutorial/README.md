@@ -12,3 +12,11 @@ Remakes `~/Videos/Ironline_tutorial.mp4`: a narrated walkthrough from new custom
 4. Put the narration on the video at each scene's start time and export the MP4 with ffmpeg (see the history for the exact command; it uses `adelay` per clip, `amix`, and scales 1600×900 up to 1920×1080).
 
 Each recording creates a new demo customer "Brightline Brackets" with a quote, order and job in the demo shop.
+
+## Modules video
+
+`modules/` remakes `~/Videos/Ironline_modules_tutorial.mp4` (about 4 minutes): quality, inventory,
+purchasing and reports. Same steps as above, run inside `modules/` (copy `tts.py` in first). This
+recording only looks and clicks: nothing is saved, so the demo data stays as it is. It expects the
+demo records from 2026-11-19 (DMW-1040 drawing and plan, J-00002 readings, lots, PO-00001, the
+"Monthly sales" report).
