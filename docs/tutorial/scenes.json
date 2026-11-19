@@ -1,0 +1,18 @@
+[
+  {"id": "01_intro", "text": "Welcome to Ironline, a system for running a machine shop. In this video we will take one order all the way from a new customer to the shop floor. This is the dashboard. It shows open quotes, your backlog, open jobs, late jobs, and how much work is waiting at each machine."},
+  {"id": "02_customer", "text": "First, we add the customer. Open Customers and click Add customer. Type the company name, an e-mail and a phone number, then save."},
+  {"id": "03_customer_page", "text": "This is the customer page. You can see their quotes, orders, contacts and files in one place. Now click New quote."},
+  {"id": "04_quote", "text": "The quote opens with the customer already filled in. Choose a part from the catalogue. Ironline copies its operations and materials, and prices the work from machine time, labor and material. Set the quantity to one hundred. The total, cost, profit and margin update straight away."},
+  {"id": "05_send", "text": "Save the quote. When you send it to the customer, click Mark as sent. The progress line at the top moves to Sent to customer."},
+  {"id": "06_won", "text": "The customer said yes. Click Won, create order. Type their purchase order number, and keep Create a job ticked. Then click Create sales order."},
+  {"id": "07_order", "text": "Here is the sales order, with the order value, the due date and the job that was made for it. Click the job number to open the job."},
+  {"id": "08_job", "text": "The job page shows estimated material and labor cost, the projected margin, and the part's 3D model. When you are ready to build it, click Release to shop."},
+  {"id": "09_operator", "text": "Now the job is on the shop floor. Click Work on it. This is the operator screen. The part fills the screen, timers run along the top, and the controls are on the left."},
+  {"id": "10_setup", "text": "Press the big green button to start setup time. The setup bar at the top starts to fill. Press pause when setup is done."},
+  {"id": "11_count", "text": "Switch to Labor and start again. To count finished parts, set how many to add, then press the plus button. Here we add fifty, twice. The parts bar shows one hundred of one hundred."},
+  {"id": "12_pick", "text": "Open Pick to take material for the job. Press Pick, and the material is marked as picked with a green check."},
+  {"id": "13_chat", "text": "Open Chat to talk to the office about this job. Use the at sign to mention someone. You can also send an alert, or a photo from the tablet camera."},
+  {"id": "14_complete", "text": "When the step is finished, pause the timer and open Complete. You see the parts made, picking, scrap, and the time for setup and labor. Click Close operation. The job moves on to the next machine."},
+  {"id": "15_board", "text": "The schedule board shows every machine's queue. Our job is now waiting at the lathe, marked Setup pending. Late jobs get a red border."},
+  {"id": "16_outro", "text": "Back on the dashboard, the backlog and open jobs include our new order. That is the whole flow: customer, quote, order, job, and the shop floor. Thanks for watching."}
+]

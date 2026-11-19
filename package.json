@@ -1,0 +1,13 @@
+{
+  "name": "ironline-erp",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "npm run dev -w @ironline/api & npm run dev -w @ironline/web",
+    "db:migrate": "npm run db:migrate -w @ironline/api",
+    "test": "npm test -w @ironline/shared && npm test -w @ironline/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build -w @ironline/web"
+  }
+}
