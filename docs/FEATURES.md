@@ -481,3 +481,22 @@ Sized for a tablet: larger job card and avatar, 226 px left panel with square Se
   time the page opens.
 - **Not built yet:** an AI report assistant, heat map and funnel charts, editing data from a
   report, scheduled e-mailed reports, per-user private reports, Excel export.
+
+## 3D viewer upgrade (2026-11-19)
+
+One toolbar in three groups, each tool with a tooltip; buttons with a small corner mark open a
+menu above them.
+- **Navigate:** Orbit, Pan and Zoom modes for the left mouse button; Fit (fits what is visible,
+  also after exploding or isolating); Views menu with Home (3D), Front, Back, Top, Bottom, Left,
+  Right and a perspective / orthographic switch.
+- **Inspect:** Measure distance (with X/Y/Z split) or angle from three points, snapping to
+  corners; Section along X, Y or Z with flip and a position slider (edge lines are cut too);
+  Explode for assemblies with a spread slider; Display style: shaded, shaded with edges,
+  wireframe, X-ray, and design colours from the CAD file.
+- **Panels:** Model tree (every part by name, search, show/hide, isolate, zoom to part);
+  Properties for the selected part or whole model (length, width, height, surface area,
+  volume, triangles, weight for steel, stainless, aluminium, brass, copper, titanium or
+  plastic); zoom to selected; save a PNG picture of the view; settings (mm or inches,
+  perspective or orthographic, studio / white / dark background, floor shadow); full screen.
+- Click a part to select and highlight it; double-click to zoom to it. Keys: F fit, H home,
+  Esc clears the measurement, then the selection.
