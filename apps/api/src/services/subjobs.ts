@@ -9,7 +9,7 @@
 import { materialCost, operationCost } from "@ironline/shared";
 import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { Tx } from "../db/client.ts";
-import { bomLines, items, jobMaterials, jobOperations, jobs, laborEntries, routingOperations, workCenters } from "../db/schema.ts";
+import { bomLines, items, jobMaterials, jobOperations, jobs, laborEntries, routingOperations, stockTransactions, workCenters } from "../db/schema.ts";
 import { badRequest, conflict, EDITORS, notFound, requireRole, type Ctx } from "../ctx.ts";
 import type { Db } from "../db/client.ts";
 import { logEvent } from "./common.ts";
@@ -17,6 +17,8 @@ import { receiveStock } from "./inventory.ts";
 
 type Job = typeof jobs.$inferSelect;
 const MAX_DEPTH = 6;
+/** Most piece jobs one assembly job may create, at all levels together. */
+export const MAX_PIECE_JOBS = 200;
 const r4 = (n: number) => Math.round(n * 10000) / 10000;
 const DONE = ["complete", "closed", "cancelled"];
 
@@ -63,7 +65,7 @@ export async function buildFromItem(tx: Tx, ctx: Ctx, jobId: string, itemId: str
  * Give every made-in-house material line on this job its own linked job (and so on down the
  * tree). `seen` holds the part numbers above, so a part that contains itself stops.
  */
-export async function spawnChildren(tx: Tx, ctx: Ctx, parent: Job, seen: Set<string>, depth = 0) {
+export async function spawnChildren(tx: Tx, ctx: Ctx, parent: Job, seen: Set<string>, depth = 0, budget = { left: MAX_PIECE_JOBS }) {
   if (depth >= MAX_DEPTH) return 0;
   const lines = await tx
     .select({ mat: jobMaterials, type: items.type, partNumber: items.partNumber, itemDescription: items.description })
@@ -77,6 +79,8 @@ export async function spawnChildren(tx: Tx, ctx: Ctx, parent: Job, seen: Set<str
     if (seen.has(l.mat.itemId!)) continue;
     const [already] = await tx.select({ id: jobs.id }).from(jobs).where(and(eq(jobs.parentJobId, parent.id), eq(jobs.parentMaterialId, l.mat.id)));
     if (already) continue;
+    if (budget.left <= 0) throw badRequest(`This assembly would need more than ${MAX_PIECE_JOBS} piece jobs. Split it into smaller assemblies.`);
+    budget.left -= 1;
     n += 1;
     const [child] = await tx
       .insert(jobs)
@@ -97,7 +101,7 @@ export async function spawnChildren(tx: Tx, ctx: Ctx, parent: Job, seen: Set<str
     await tx.update(jobs).set({ estimatedCost: est }).where(eq(jobs.id, child!.id));
     await logEvent(tx, ctx, "job", child!.id, "created", { number: child!.number, forJob: parent.number });
     made += 1;
-    made += await spawnChildren(tx, ctx, child!, new Set([...seen, l.mat.itemId!]), depth + 1);
+    made += await spawnChildren(tx, ctx, child!, new Set([...seen, l.mat.itemId!]), depth + 1, budget);
   }
   if (made) await logEvent(tx, ctx, "job", parent.id, "piece_jobs_created", { count: lines.length });
   return made;
@@ -135,7 +139,12 @@ export async function cascadeStatus(tx: Tx, ctx: Ctx, parentId: string, to: "rel
 export async function onJobComplete(tx: Tx, ctx: Ctx, jobId: string) {
   const [job] = await tx.select().from(jobs).where(eq(jobs.id, jobId));
   if (!job?.parentJobId || !job.itemId) return;
-  const good = job.quantityCompleted;
+  // Receive only what this job has not put into stock before (a job can be reopened and finished again).
+  const [prev] = await tx
+    .select({ q: sql<number>`coalesce(sum(${stockTransactions.quantity}), 0)::float` })
+    .from(stockTransactions)
+    .where(and(eq(stockTransactions.orgId, ctx.orgId), eq(stockTransactions.kind, "receive"), eq(stockTransactions.sourceType, "job"), eq(stockTransactions.sourceId, job.id)));
+  const good = r4(job.quantityCompleted - (prev?.q ?? 0));
   if (good > 0) {
     await receiveStock(tx, ctx, {
       itemId: job.itemId,

@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, or } from "drizzle-orm";
 import type { ItemInput, WorkCenterInput } from "@ironline/shared";
 import type { Db, Tx } from "../db/client.ts";
 import { bomLines, items, routingOperations, workCenters } from "../db/schema.ts";
@@ -106,34 +106,54 @@ async function writeStructure(tx: Tx, ctx: Ctx, itemId: string, input: Pick<Item
 /** Pieces per job assumed when spreading a made part's setup over its cost (same as the part page). */
 export const COST_BATCH = 10;
 
+/** Most parts one save may re-cost (the part and every assembly above it). */
+const MAX_RECOST = 500;
+
+/** A made part's cost from its routing (setup over COST_BATCH pieces) and its components' current costs. */
+async function costOf(tx: Tx, itemId: string) {
+  const ops = await tx
+    .select({ setup: routingOperations.setupHours, run: routingOperations.runHoursPerUnit, rate: workCenters.hourlyRate })
+    .from(routingOperations)
+    .innerJoin(workCenters, eq(workCenters.id, routingOperations.workCenterId))
+    .where(eq(routingOperations.itemId, itemId));
+  const mats = await tx
+    .select({ per: bomLines.quantityPer, scrap: bomLines.scrapPct, cost: items.unitCost, type: items.type })
+    .from(bomLines)
+    .innerJoin(items, eq(items.id, bomLines.componentItemId))
+    .where(eq(bomLines.parentItemId, itemId));
+  const labor = ops.reduce((a, o) => a + (o.setup * o.rate) / COST_BATCH + o.run * o.rate, 0);
+  const material = mats.reduce((a, m) => a + m.cost * m.per * (m.type === "material" ? 1 + m.scrap / 100 : 1), 0);
+  return Math.round((labor + material) * 10000) / 10000;
+}
+
 /**
- * Keep a made part's standard cost up to date: routing (setup spread over COST_BATCH pieces, plus
- * run time) plus its bill of materials, where made pieces use their own standard cost. Then
- * update every assembly that uses this part, so costs roll all the way up.
+ * Keep a made part's standard cost up to date, and every assembly that uses it: routing (setup
+ * spread over COST_BATCH pieces, plus run time) plus its bill of materials, where made pieces
+ * use their own standard cost. The part and all assemblies above it are gathered once (capped),
+ * then re-costed bottom-up in a few passes until nothing changes.
  */
-export async function refreshStandardCost(tx: Tx, ctx: Ctx, itemId: string, seen = new Set<string>()) {
-  if (seen.has(itemId) || seen.size > 50) return;
-  seen.add(itemId);
-  const [it] = await tx.select({ type: items.type }).from(items).where(and(eq(items.orgId, ctx.orgId), eq(items.id, itemId)));
-  if (!it) return;
-  if (it.type === "manufactured") {
-    const ops = await tx
-      .select({ setup: routingOperations.setupHours, run: routingOperations.runHoursPerUnit, rate: workCenters.hourlyRate })
-      .from(routingOperations)
-      .innerJoin(workCenters, eq(workCenters.id, routingOperations.workCenterId))
-      .where(eq(routingOperations.itemId, itemId));
-    const mats = await tx
-      .select({ per: bomLines.quantityPer, scrap: bomLines.scrapPct, cost: items.unitCost, type: items.type })
-      .from(bomLines)
-      .innerJoin(items, eq(items.id, bomLines.componentItemId))
-      .where(eq(bomLines.parentItemId, itemId));
-    const labor = ops.reduce((a, o) => a + (o.setup * o.rate) / COST_BATCH + o.run * o.rate, 0);
-    const material = mats.reduce((a, m) => a + m.cost * m.per * (m.type === "material" ? 1 + m.scrap / 100 : 1), 0);
-    const cost = Math.round((labor + material) * 10000) / 10000;
-    await tx.update(items).set({ unitCost: cost }).where(eq(items.id, itemId));
+export async function refreshStandardCost(tx: Tx, ctx: Ctx, itemId: string) {
+  const affected = [itemId];
+  const seen = new Set(affected);
+  for (let i = 0; i < affected.length && affected.length < MAX_RECOST; i++) {
+    const parents = await tx.select({ id: bomLines.parentItemId }).from(bomLines).where(and(eq(bomLines.orgId, ctx.orgId), eq(bomLines.componentItemId, affected[i]!)));
+    for (const p of parents) if (!seen.has(p.id)) (seen.add(p.id), affected.push(p.id));
   }
-  const parents = await tx.select({ id: bomLines.parentItemId }).from(bomLines).where(and(eq(bomLines.orgId, ctx.orgId), eq(bomLines.componentItemId, itemId)));
-  for (const p of parents) await refreshStandardCost(tx, ctx, p.id, new Set(seen));
+  const made = await tx.select({ id: items.id, cost: items.unitCost }).from(items).where(and(eq(items.orgId, ctx.orgId), eq(items.type, "manufactured"), inArray(items.id, affected)));
+  const current = new Map(made.map((m) => [m.id, m.cost]));
+  // Each pass settles one more level of the tree; deep trees are rare, so a few passes suffice.
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false;
+    for (const id of current.keys()) {
+      const cost = await costOf(tx, id);
+      if (cost !== current.get(id)) {
+        current.set(id, cost);
+        await tx.update(items).set({ unitCost: cost }).where(eq(items.id, id));
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
 }
 
 async function partTaken(db: Db | Tx, ctx: Ctx, partNumber: string, revision: string, exceptId?: string) {

@@ -61,6 +61,10 @@ describe("assemblies with pieces made in house", () => {
     expect(job.operations[0].status).toBe("ready");
     const stock = await call("GET", `/inventory/items/${side.body.id}`);
     expect(stock.body.onHand).toBe(10);
+    // Reopening a finished piece job and finishing it again does not receive its pieces twice.
+    await call("POST", `/jobs/${job.children[0].id}/status`, { status: "in_progress" });
+    await call("POST", `/jobs/${job.children[0].id}/status`, { status: "complete" });
+    expect((await call("GET", `/inventory/items/${side.body.id}`)).body.onHand).toBe(10);
     // The assembly picks the made pieces from stock at what they cost to make.
     const sideLine = job.materials.find((m: { itemId: string }) => m.itemId === side.body.id);
     await call("POST", `/floor/materials/${sideLine.id}/pick`, { quantity: 10 });
