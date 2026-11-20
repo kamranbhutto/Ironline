@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { api, ApiError, qs, type Item, type ItemDetail, type WorkCenter } from "../api.ts";
 import { BomBuilder } from "../components/BomBuilder.tsx";
-import { FilesPanel, pollWhilePreparing, type FileRow } from "../components/Files.tsx";
+import { FilesPanel, PendingFiles, pollWhilePreparing, uploadFiles, type FileRow } from "../components/Files.tsx";
 import { InspectionPlan } from "../components/InspectionPlan.tsx";
 import { PartStock } from "./Inventory.tsx";
 import { Badge, Button, ButtonLink, Card, cx, DetailTitle, ErrorNote, InsetField, insetControl, Loading, MetricCard, PageHeader, PillTabs, recordCard, SearchBox, Status, TabPanel, Table, Td, R, ListBar, ViewTabs } from "../components/ui.tsx";
@@ -74,6 +74,8 @@ export function ItemEditorPage() {
   const [form, setForm] = useState<Form>(blank);
   const [tab, setTab] = useState<PartTab>("files");
   const [fileCount, setFileCount] = useState<number | undefined>();
+  const [queued, setQueued] = useState<File[]>([]);
+  const uploadError = (useLocation().state as { uploadError?: string } | null)?.uploadError;
 
   useEffect(() => {
     const d = item.data;
@@ -103,10 +105,21 @@ export function ItemEditorPage() {
       };
       return id ? api<ItemDetail>(`/items/${id}`, "PUT", body) : api<ItemDetail>("/items", "POST", body);
     },
-    onSuccess: (saved) => {
+    onSuccess: async (saved) => {
       qc.invalidateQueries({ queryKey: ["items"] });
       qc.setQueryData(["item", saved.id], saved);
-      if (!id) nav(`/items/${saved.id}`, { replace: true });
+      if (!id) {
+        // Drawings dropped before the first save go up now that the part exists.
+        let uploadError: string | undefined;
+        if (queued.length) {
+          try {
+            await uploadFiles("item", saved.id, queued);
+          } catch (e) {
+            uploadError = `The part was saved, but a drawing did not upload: ${(e as Error).message}. Drop it again below.`;
+          }
+        }
+        nav(`/items/${saved.id}`, { replace: true, state: uploadError ? { uploadError } : null });
+      }
     },
   });
 
@@ -139,11 +152,12 @@ export function ItemEditorPage() {
         actions={
           <>
             {save.isSuccess && <span className="text-sm text-ok">Saved</span>}
-            <Button type="submit" variant="primary" disabled={save.isPending}>{save.isPending ? "Saving…" : "Save part"}</Button>
+            <Button type="submit" variant="primary" disabled={save.isPending}>{save.isPending ? (queued.length ? "Saving and uploading…" : "Saving…") : "Save part"}</Button>
           </>
         }
       />
       {!Object.keys(fields).length && <div className="mb-4"><ErrorNote error={save.error} /></div>}
+      {uploadError && <div className="mb-4"><ErrorNote error={new Error(uploadError)} /></div>}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-5">
         <MetricCard label={made ? "Cost per piece" : "Unit cost"} value={money(cost10)} tone="line" note={made ? (has ? "At a batch of 10" : "Add routing and materials") : `Per ${form.uom || "unit"}`} />
@@ -215,7 +229,7 @@ export function ItemEditorPage() {
             (id ? (
               <FilesPanel entity="item" entityId={id} height={460} onCount={setFileCount} />
             ) : (
-              <p className="py-10 text-center text-sm text-muted">Save the part first, then drop its drawings and STEP or STL models here. They follow the part to every quote and job.</p>
+              <PendingFiles files={queued} onChange={setQueued} />
             ))}
           {tab === "stock" && id && <PartStock itemId={id} />}
           {tab === "cost" && (

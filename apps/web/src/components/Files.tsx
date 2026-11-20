@@ -104,6 +104,59 @@ export function FilePreview({ file, compact = false, immersive = false }: { file
   );
 }
 
+/** Upload files to a record, one at a time; stops at the first failure. */
+export async function uploadFiles(entity: Entity, entityId: string, fs: File[]) {
+  for (const f of fs) {
+    const body = new FormData();
+    body.append("file", f);
+    const res = await fetch(`/api/v1/files?entity=${entity}&entityId=${entityId}`, { method: "POST", body, credentials: "same-origin" });
+    if (!res.ok) {
+      const d = await res.json().catch(() => null);
+      throw new ApiError(res.status, d?.error?.message ?? `Upload failed (${res.status})`);
+    }
+  }
+}
+
+/** Drop zone for a record that is not saved yet: files wait here and go up once it is saved. */
+export function PendingFiles({ files, onChange }: { files: File[]; onChange: (fs: File[]) => void }) {
+  const [drag, setDrag] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const add = (fl: FileList | null) => fl && fl.length && onChange([...files, ...fl]);
+  return (
+    <div
+      onDragOver={(e) => (e.preventDefault(), setDrag(true))}
+      onDragLeave={() => setDrag(false)}
+      onDrop={(e) => (e.preventDefault(), setDrag(false), add(e.dataTransfer.files))}
+      className={cx("space-y-3 rounded-xl transition-colors", drag && "bg-accent-soft ring-2 ring-accent")}
+    >
+      <input ref={input} type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => (add(e.target.files), (e.target.value = ""))} />
+      <button
+        type="button"
+        onClick={() => input.current?.click()}
+        className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line py-12 text-center hover:border-accent hover:bg-accent-soft/40"
+      >
+        <Upload className="h-8 w-8 text-accent" />
+        <span className="text-sm font-medium">Drop drawings and 3D models here, or click to choose</span>
+        <span className="text-xs text-muted">They upload when you click Save part, then open here in 3D</span>
+      </button>
+      {files.length > 0 && (
+        <ul className="divide-y divide-line rounded-lg ring-1 ring-line">
+          {files.map((f, i) => (
+            <li key={`${f.name}-${i}`} className="flex items-center gap-2 px-3 py-2 text-sm">
+              <FileIcon className="h-4 w-4 shrink-0 text-muted" />
+              <span className="min-w-0 flex-1 truncate">{f.name}</span>
+              <span className="num text-xs text-muted">{size(f.size)}</span>
+              <button type="button" aria-label={`Remove ${f.name}`} className="rounded p-1 text-muted hover:bg-panel-2 hover:text-bad" onClick={() => onChange(files.filter((_, j) => j !== i))}>
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /** Files of a record: thumbnail strip, large viewer, upload, download, delete, full screen. */
 export function FilesPanel({ entity, entityId, height = 460, onCount }: { entity: Entity; entityId: string; height?: number; onCount?: (n: number) => void }) {
   const qc = useQueryClient();
@@ -124,17 +177,7 @@ export function FilesPanel({ entity, entityId, height = 460, onCount }: { entity
   }, [files.map((f) => f.id).join()]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const upload = useMutation({
-    mutationFn: async (fs: File[]) => {
-      for (const f of fs) {
-        const body = new FormData();
-        body.append("file", f);
-        const res = await fetch(`/api/v1/files?entity=${entity}&entityId=${entityId}`, { method: "POST", body, credentials: "same-origin" });
-        if (!res.ok) {
-          const d = await res.json().catch(() => null);
-          throw new ApiError(res.status, d?.error?.message ?? `Upload failed (${res.status})`);
-        }
-      }
-    },
+    mutationFn: (fs: File[]) => uploadFiles(entity, entityId, fs),
     onSettled: () => qc.invalidateQueries({ queryKey: key }),
   });
   const remove = useMutation({ mutationFn: (id: string) => api(`/files/${id}`, "DELETE"), onSuccess: () => (qc.invalidateQueries({ queryKey: key }), setConfirmDelete(null)) });
