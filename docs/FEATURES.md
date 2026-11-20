@@ -500,3 +500,24 @@ menu above them.
   perspective or orthographic, studio / white / dark background, floor shadow); full screen.
 - Click a part to select and highlight it; double-click to zoom to it. Keys: F fit, H home,
   Esc clears the measurement, then the selection.
+
+## Assemblies made from pieces (2026-11-20)
+
+- **Piece jobs:** when a job's bill of materials contains parts made in house, each one gets
+  its own linked job (J-00012-1, J-00012-2…) with that part's routing and materials, for the
+  quantity the assembly needs; pieces of pieces work the same way.
+- **Releasing** the assembly releases its piece jobs; cancelling or moving it back to planned
+  does the same. The assembly's first step waits ("Waiting for pieces" on the board and a
+  clear message on the floor) until every piece job is finished.
+- **Finished piece jobs** put their good pieces into stock at what they cost to make, so the
+  assembly picks them from Inventory like any other material.
+- **Job page:** "Pieces for this assembly" cards (status, steps done, quantity made) and a
+  "Piece of J-…" link on each piece job. Jobs list shows the assembly's order and customer on
+  piece jobs.
+- **Copy routing from the part:** a job made before its part had a routing (or after the part
+  changed) takes the part's current routing, materials and piece jobs, while no time or
+  material has been booked on it.
+- **Standard cost rolls up:** a made part's cost is its routing (setup spread over 10 pieces)
+  plus materials plus its made pieces, kept up to date when the part or any piece is saved,
+  so quotes and jobs for assemblies include every piece. `npm run db:recost -w @ironline/api`
+  recalculates all parts (run after upgrading or changing work-center rates).

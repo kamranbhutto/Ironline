@@ -21,6 +21,7 @@ import {
 import { badRequest, conflict, EDITORS, notFound, requireRole, type Ctx } from "../ctx.ts";
 import { like, logEvent, nextNumber } from "./common.ts";
 import { copyPlanToJob } from "./quality.ts";
+import { cascadeStatus, childrenOf, onJobComplete, openChildren, spawnChildren } from "./subjobs.ts";
 
 /**
  * Create a job for one sales-order line. Operations and materials come from the quote
@@ -136,6 +137,8 @@ export async function createJobForOrderLine(tx: Tx, ctx: Ctx, salesOrderLineId: 
     .set({ status: "in_production", updatedAt: new Date() })
     .where(and(eq(salesOrders.id, line.salesOrderId), eq(salesOrders.status, "confirmed")));
   await copyPlanToJob(tx, ctx, job!.id, line.itemId);
+  // Pieces made in house get their own linked jobs.
+  await spawnChildren(tx, ctx, job!, new Set(line.itemId ? [line.itemId] : []));
   await logEvent(tx, ctx, "job", job!.id, "created", { number, salesOrderLineId: line.id });
   return job!;
 }
@@ -169,9 +172,10 @@ export async function listJobs(db: Db, ctx: Ctx, opts: { q?: string; status?: st
       status: jobs.status,
       estimatedCost: jobs.estimatedCost,
       actualCost: jobs.actualCost,
-      salesOrderId: salesOrders.id,
-      salesOrderNumber: salesOrders.number,
-      customerName: customers.name,
+      // A piece job has no order line of its own: show its assembly's order and customer.
+      salesOrderId: sql<string | null>`coalesce(${salesOrders.id}, (select so.id from jobs pj join sales_order_lines l on l.id = pj.sales_order_line_id join sales_orders so on so.id = l.sales_order_id where pj.id = ${jobs.parentJobId}))`,
+      salesOrderNumber: sql<string | null>`coalesce(${salesOrders.number}, (select so.number from jobs pj join sales_order_lines l on l.id = pj.sales_order_line_id join sales_orders so on so.id = l.sales_order_id where pj.id = ${jobs.parentJobId}))`,
+      customerName: sql<string | null>`coalesce(${customers.name}, (select c.name from jobs pj join sales_order_lines l on l.id = pj.sales_order_line_id join sales_orders so on so.id = l.sales_order_id join customers c on c.id = so.customer_id where pj.id = ${jobs.parentJobId}))`,
       operationsDone: sql<number>`(select count(*)::int from job_operations o where o.job_id = ${jobs.id} and o.status = 'done')`,
       operationsTotal: sql<number>`(select count(*)::int from job_operations o where o.job_id = ${jobs.id})`,
     })
@@ -180,7 +184,7 @@ export async function listJobs(db: Db, ctx: Ctx, opts: { q?: string; status?: st
     .leftJoin(salesOrders, eq(salesOrders.id, salesOrderLines.salesOrderId))
     .leftJoin(customers, eq(customers.id, salesOrders.customerId))
     .where(and(...where))
-    .orderBy(asc(jobs.dueDate), desc(jobs.priority))
+    .orderBy(asc(jobs.dueDate), desc(jobs.priority), asc(jobs.number))
     .limit(500);
 }
 
@@ -219,6 +223,10 @@ export async function getJob(db: Db | Tx, ctx: Ctx, id: string) {
     .where(and(eq(events.orgId, ctx.orgId), eq(events.entity, "job"), eq(events.entityId, id)))
     .orderBy(desc(events.createdAt))
     .limit(200);
+  const [children, parentRow] = await Promise.all([
+    childrenOf(db, id),
+    job.job.parentJobId ? db.select({ id: jobs.id, number: jobs.number, description: jobs.description }).from(jobs).where(eq(jobs.id, job.job.parentJobId)) : Promise.resolve([]),
+  ]);
   const opEst = operations.reduce((a, o) => a + o.op.estimatedCost, 0);
   const opAct = operations.reduce((a, o) => a + o.op.actualCost, 0);
   const matEst = materials.reduce((a, m) => a + m.estimatedCost, 0);
@@ -236,6 +244,8 @@ export async function getJob(db: Db | Tx, ctx: Ctx, id: string) {
     part: job.part?.partNumber ? job.part : null,
     revenue,
     costs,
+    children,
+    parent: parentRow[0] ?? null,
     log,
     operations: operations.map((o) => ({ ...o.op, workCenterCode: o.workCenterCode, workCenterName: o.workCenterName })),
     materials,
@@ -261,13 +271,19 @@ export async function setJobStatus(db: Db, ctx: Ctx, id: string, status: JobStat
     if (status === "released") {
       const ops = await tx.select({ id: jobOperations.id }).from(jobOperations).where(eq(jobOperations.jobId, id)).orderBy(asc(jobOperations.sequence));
       if (!ops.length) throw badRequest("Add at least one operation before releasing the job");
-      await tx.update(jobOperations).set({ status: "ready" }).where(and(eq(jobOperations.id, ops[0]!.id), eq(jobOperations.status, "pending")));
+      // Piece jobs go to the floor too; the assembly's first step waits until they are done.
+      await cascadeStatus(tx, ctx, id, "released");
+      if (!(await openChildren(tx, id)).length) {
+        await tx.update(jobOperations).set({ status: "ready" }).where(and(eq(jobOperations.id, ops[0]!.id), eq(jobOperations.status, "pending")));
+      }
     }
+    if (status === "planned" || status === "cancelled") await cascadeStatus(tx, ctx, id, status);
     if (status === "planned") {
       await tx.update(jobOperations).set({ status: "pending" }).where(and(eq(jobOperations.jobId, id), eq(jobOperations.status, "ready")));
     }
     await tx.update(jobs).set({ status, updatedAt: new Date() }).where(eq(jobs.id, id));
     await logEvent(tx, ctx, "job", id, "status", { from, to: status });
+    if (status === "complete") await onJobComplete(tx, ctx, id);
     return getJob(tx, ctx, id);
   });
 }

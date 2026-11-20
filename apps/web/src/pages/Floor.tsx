@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Hourglass, Package, Pause, Play, RefreshCw, Activity, Clock, CircleDashed } from "lucide-react";
+import { Boxes, Hourglass, Package, Pause, Play, RefreshCw, Activity, Clock, CircleDashed } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { api } from "../api.ts";
@@ -101,6 +101,7 @@ const STATE: Record<string, { label: string; cls: string; icon: typeof Play }> =
   ready: { label: "Ready", cls: "bg-[#4fb6ef] text-white", icon: Play },
   setup_pending: { label: "Setup pending", cls: "bg-[#8b74e0] text-white", icon: Hourglass },
   waiting: { label: "Waiting on previous step", cls: "bg-panel-2 text-muted", icon: Clock },
+  pieces: { label: "Waiting for pieces", cls: "bg-warn-soft text-warn", icon: Boxes },
   planned: { label: "Not released", cls: "bg-panel-2 text-muted", icon: CircleDashed },
 };
 const PRIORITY = (p: number) => (p >= 90 ? "Urgent" : p >= 70 ? "High" : p >= 40 ? "Moderate" : "Low");

@@ -80,3 +80,9 @@ adapts.
 32. **Reports read fixed datasets**, not free SQL: each dataset is a read-only query limited to
     the user's shop; grouping and totals are done in the browser (up to 20,000 rows).
 33. **Reports are shared** by everyone in the shop; viewers can open but not save or delete.
+34. **Piece jobs** are made for every made-in-house part in a job's materials, numbered after
+    the assembly job, due the same day, same priority. A part that contains itself is skipped.
+35. **The whole assembly waits for all its pieces** (no partial start with some pieces).
+36. **Standard cost of made parts** spreads setup over a batch of 10 pieces, the same basis as
+    the part page's cost per piece; it updates when the part or a piece is saved, not when a
+    work-center rate changes (run db:recost then).

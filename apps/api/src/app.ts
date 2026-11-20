@@ -29,6 +29,7 @@ import * as quality from "./services/quality.ts";
 import * as inventory from "./services/inventory.ts";
 import * as purchasing from "./services/purchasing.ts";
 import * as reportsSvc from "./services/reports.ts";
+import * as subjobs from "./services/subjobs.ts";
 
 export const COOKIE = "ironline_session";
 
@@ -292,6 +293,11 @@ export function buildApp(db: Db, opts: { logger?: boolean; secureCookies?: boole
   app.post(`${api}/floor/materials/:id/pick`, async (req) =>
     floor.pickMaterial(db, ctxOf(req), parse(idParam, req.params).id, parse(floor.pickSchema, req.body).quantity),
   );
+  app.post(`${api}/jobs/:id/rebuild`, async (req) => {
+    const id = parse(idParam, req.params).id;
+    await subjobs.rebuildJob(db, ctxOf(req), id);
+    return jobsSvc.getJob(db, ctxOf(req), id);
+  });
   app.patch(`${api}/jobs/:id`, async (req) =>
     jobsSvc.updateJob(db, ctxOf(req), parse(idParam, req.params).id, parse(jobsSvc.jobUpdateSchema, req.body)),
   );

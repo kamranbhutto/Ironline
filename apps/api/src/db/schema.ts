@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   date,
@@ -422,6 +423,9 @@ export const jobs = pgTable(
     orgId: orgRef(),
     number: text("number").notNull(),
     salesOrderLineId: uuid("sales_order_line_id").references(() => salesOrderLines.id),
+    /** For a job that makes a piece of an assembly: the assembly's job, and the material line it supplies. */
+    parentJobId: uuid("parent_job_id").references((): AnyPgColumn => jobs.id, { onDelete: "cascade" }),
+    parentMaterialId: uuid("parent_material_id"),
     itemId: uuid("item_id").references(() => items.id),
     description: text("description").notNull(),
     quantity: qty("quantity").notNull(),

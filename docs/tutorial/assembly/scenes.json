@@ -1,0 +1,66 @@
+[
+ {
+  "id": "01_title",
+  "text": "Hello, and welcome. In this short video you will see how to build a product that is made from four separate pieces. Each piece gets its own routing and its own job on the shop floor, and when all four are finished, they are assembled into the final product."
+ },
+ {
+  "id": "02_piece",
+  "text": "Step one. Every piece is a part of its own. Open Parts and materials, click Add part, and enter the part number and a description. Keep the type as Made in house."
+ },
+ {
+  "id": "03_routing",
+  "text": "Step two. Add the routing. Click Edit in the bill of materials and routing section, and open the Operations list. Add each work center in the order the piece is made. Here the frame is cut on the fiber laser, formed on the press brake, and then deburred. For each step, type the instructions for the operator, the setup hours, and the run minutes per piece. Ironline works out the cost as you go."
+ },
+ {
+  "id": "04_save_piece",
+  "text": "Click Save part. This piece now has its own routing: cut on the laser, bend on the press brake, then deburr."
+ },
+ {
+  "id": "05_others",
+  "text": "The other three pieces are set up the same way. Here they are: the back shell, the lumbar support plate, and the mounting bracket, each with its own steps."
+ },
+ {
+  "id": "06_assembly",
+  "text": "Step three. Create the assembly itself: this is the part you sell, with its own part number. Click Edit, search the Items list for the pieces, and add all four of them as components of the assembly."
+ },
+ {
+  "id": "07_asm_ops",
+  "text": "Next, add the assembly's own steps. On the assembly bench, the operator fits the frame, the shell, the plate and the brackets together and torques the bolts. Then final inspection checks the fit, the fasteners and the finish. Click Done editing, and save the part."
+ },
+ {
+  "id": "08_tree",
+  "text": "The tree now shows the whole product: the assembly, its four pieces, and each piece's own routing underneath."
+ },
+ {
+  "id": "09_quote",
+  "text": "Step four. Quote the assembly as usual. Choose the part and enter the quantity. Ironline prices every piece and every step for you."
+ },
+ {
+  "id": "10_order",
+  "text": "When the customer accepts, save the quote and mark it as sent, then as won. Enter the customer's purchase order number, and create the sales order."
+ },
+ {
+  "id": "11_job",
+  "text": "Now open the job. The assembly job automatically has four piece jobs, one for each part, numbered after the assembly. Each one carries its own routing and materials."
+ },
+ {
+  "id": "12_release",
+  "text": "Release the job to the shop. All four piece jobs are released together, and the assembly step waits until every piece is finished."
+ },
+ {
+  "id": "13_piece_job",
+  "text": "Open a piece job to see its steps. Operators work on it like any other job. When it is finished, the good pieces go into stock, ready for the assembly to pick."
+ },
+ {
+  "id": "14_board",
+  "text": "On the schedule board, every piece shows up at its own work center, so you can see the full load across the shop."
+ },
+ {
+  "id": "15_old_job",
+  "text": "Do you have a job that was made before its part had a routing? Add the routing to the part, then click Copy routing from the part on the job. The job picks up the steps and creates the piece jobs."
+ },
+ {
+  "id": "16_outro",
+  "text": "And that's it. Pieces with their own routings, an assembly that brings them together, and jobs that follow the whole product through your shop. Thanks for watching."
+ }
+]

@@ -4,6 +4,7 @@ import type { Db, Tx } from "../db/client.ts";
 import { customers, items, jobMaterials, jobOperations, jobs, laborEntries, salesOrderLines, salesOrders, users, workCenters } from "../db/schema.ts";
 import { badRequest, conflict, HttpError, notFound, type Ctx } from "../ctx.ts";
 import { consumeForJob, lotsForItems, returnFromJob } from "./inventory.ts";
+import { onJobComplete, openChildren } from "./subjobs.ts";
 import { logEvent } from "./common.ts";
 
 /** Everyone who works on the floor may use these; viewers may only look. */
@@ -212,7 +213,11 @@ export async function startTimer(db: Db, ctx: Ctx, opId: string, kind: "setup" |
   return db.transaction(async (tx) => {
     const { op, job } = await loadOp(tx, ctx, opId);
     if (!["released", "in_progress"].includes(job.status)) throw conflict("Release the job before starting work on it");
-    if (!["ready", "running"].includes(op.status)) throw conflict(op.status === "done" ? "This operation is already complete" : "This operation is not ready yet — the previous step is still open");
+    if (!["ready", "running"].includes(op.status)) {
+      const waiting = await openChildren(tx, job.id);
+      if (waiting.length && op.status === "pending") throw conflict(`Waiting for the pieces: ${waiting.map((w) => w.number).join(", ")} must be finished first`);
+      throw conflict(op.status === "done" ? "This operation is already complete" : "This operation is not ready yet — the previous step is still open");
+    }
     // One person runs one timer at a time: switching work stops the previous timer.
     await closeOpen(tx, ctx, eq(laborEntries.userId, ctx.userId));
     await tx.insert(laborEntries).values({ orgId: ctx.orgId, jobOperationId: opId, userId: ctx.userId, kind, rate: op.rate });
@@ -259,6 +264,7 @@ export async function completeOperation(db: Db, ctx: Ctx, opId: string, input: z
       await tx.update(jobs).set({ status: "in_progress", updatedAt: new Date() }).where(eq(jobs.id, job.id));
     }
     await logEvent(tx, ctx, "job", job.id, "operation_done", { operation: op.sequence, good: done!.quantityGood, scrap: done!.quantityScrap, next: next?.sequence });
+    if (allDone) await onJobComplete(tx, ctx, job.id);
     return { nextOperationId: next?.id ?? null, jobComplete: allDone };
   });
 }
@@ -351,6 +357,7 @@ export async function board(db: Db, ctx: Ctx) {
       partNumber: items.partNumber,
       setupLogged: sql<number>`(select count(*)::int from labor_entries l where l.job_operation_id = ${jobOperations.id} and l.kind = 'setup')`,
       materialShort: sql<boolean>`exists(select 1 from job_materials m where m.job_id = ${jobs.id} and m.kind = 'material' and m.quantity_issued < m.quantity_required)`,
+      piecesOpen: sql<number>`(select count(*)::int from jobs c where c.parent_job_id = ${jobs.id} and c.status not in ('complete', 'closed', 'cancelled'))`,
     })
     .from(jobOperations)
     .innerJoin(jobs, eq(jobs.id, jobOperations.jobId))
@@ -367,7 +374,7 @@ export async function board(db: Db, ctx: Ctx) {
     const state =
       r.jobStatus === "planned" ? "planned"
       : r.status === "running" ? "running"
-      : r.status === "pending" ? "waiting"
+      : r.status === "pending" ? (r.piecesOpen > 0 ? "pieces" : "waiting")
       : r.actualHours > 0 ? "paused"
       : r.setupHours > 0 && !r.setupLogged ? "setup_pending"
       : "ready";

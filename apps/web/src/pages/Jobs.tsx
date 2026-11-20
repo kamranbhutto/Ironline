@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Box, ChevronDown, ChevronRight, ChevronUp, HardHat, Lock, Pencil, Printer } from "lucide-react";
+import { Box, Boxes, RefreshCw, ChevronDown, ChevronRight, ChevronUp, HardHat, Lock, Pencil, Printer } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, qs, type JobDetail, type JobSummary, type Me } from "../api.ts";
@@ -182,6 +182,13 @@ export function JobDetailPage() {
             {late && <Status value="late" />}
           </h1>
           <p className="mt-1 text-sm text-muted">
+            {j.parent && (
+              <>
+                <Link className="mr-1 inline-flex items-center gap-1 rounded-md bg-accent-soft px-1.5 py-0.5 text-xs font-medium text-accent hover:underline" to={`/jobs/${j.parent.id}`}>
+                  <Boxes className="h-3 w-3" /> Piece of {j.parent.number}
+                </Link>{" "}
+              </>
+            )}
             {j.description}
             {j.salesOrderId && (
               <>
@@ -364,6 +371,7 @@ export function JobDetailPage() {
         </section>
       </div>
 
+      <PieceJobs j={j} />
       <BomRouting j={j} />
     </>
   );
@@ -405,6 +413,51 @@ function ScrapView({ j }: { j: JobDetail }) {
   );
 }
 
+/** The jobs making this assembly's pieces: each with its own routing; assembly starts when all are done. */
+function PieceJobs({ j }: { j: JobDetail }) {
+  if (!j.children.length) return null;
+  const done = j.children.filter((c) => ["complete", "closed"].includes(c.status)).length;
+  const waiting = done < j.children.length;
+  return (
+    <section className="mt-5 min-w-0 overflow-hidden rounded-xl bg-panel shadow-panel ring-1 ring-line/70">
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-panel-2/60 px-4 py-2.5">
+        <h2 className="text-lg font-semibold">Pieces for this assembly</h2>
+        <span className="text-sm text-muted">
+          {done} of {j.children.length} finished
+        </span>
+        <span className={cx("ml-auto rounded-md px-2 py-0.5 text-xs font-medium", waiting ? "bg-warn-soft text-warn" : "bg-ok-soft text-ok")}>
+          {waiting ? "Assembly waits until every piece is finished" : "All pieces ready: assembly can start"}
+        </span>
+      </header>
+      <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+        {j.children.map((c) => {
+          const pct = c.operationsTotal ? Math.round((c.operationsDone / c.operationsTotal) * 100) : 0;
+          return (
+            <Link key={c.id} to={`/jobs/${c.id}`} className="rounded-xl p-3 ring-1 ring-line transition hover:ring-2 hover:ring-accent">
+              <div className="flex items-center justify-between gap-2">
+                <span className="num font-semibold">{c.number}</span>
+                <Status value={c.status} />
+              </div>
+              <div className="mt-0.5 line-clamp-2 text-sm text-muted">{c.description.replace(/ \(for [^)]+\)$/, "")}</div>
+              <div className="mt-2 flex items-center gap-2 text-xs text-muted">
+                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-panel-2">
+                  <span className="block h-full bg-ok" style={{ width: `${pct}%` }} />
+                </span>
+                <span className="num">
+                  {c.operationsTotal ? `${c.operationsDone}/${c.operationsTotal} steps` : "No routing yet"}
+                </span>
+              </div>
+              <div className="num mt-1 text-xs text-muted">
+                {num(c.quantityCompleted, 4)} of {num(c.quantity, 4)} made{c.pieces ? ` · ${c.pieces} sub-pieces` : ""}
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 /** The job's own copy of the part's bill of materials and routing, as a part card that expands. */
 function BomRouting({ j }: { j: JobDetail }) {
   const [open, setOpen] = useState(true);
@@ -414,6 +467,13 @@ function BomRouting({ j }: { j: JobDetail }) {
   const est = j.costs.laborEstimate + j.costs.materialEstimate;
   // One-off quote lines become parts numbered after their quote (Q-1001-2), so they read as custom.
   const custom = !!j.part && /^Q-\d+-\d+$/.test(j.part.partNumber);
+  const qc = useQueryClient();
+  // A job keeps its own copy of the routing; this copies the part's current one (and makes piece jobs).
+  const rebuild = useMutation({
+    mutationFn: () => api<JobDetail>(`/jobs/${j.id}/rebuild`, "POST"),
+    onSuccess: (d) => (qc.setQueryData(["job", j.id], d), qc.invalidateQueries({ queryKey: ["jobs"] })),
+  });
+  const canRebuild = !!j.itemId && ["planned", "released"].includes(j.status);
   return (
     <section className="mt-5 min-w-0 overflow-hidden rounded-xl bg-panel shadow-panel ring-1 ring-line/70">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-panel-2/60 px-4 py-2.5">
@@ -434,9 +494,20 @@ function BomRouting({ j }: { j: JobDetail }) {
               <Pencil className="h-4 w-4" /> Edit part routing
             </ButtonLink>
           )}
+          {canRebuild && (
+            <Button variant={j.operations.length ? "ghost" : "primary"} onClick={() => rebuild.mutate()} disabled={rebuild.isPending} title="Replace this job's steps and materials with the part's current routing and bill of materials">
+              <RefreshCw className="h-4 w-4" /> Copy routing from the part
+            </Button>
+          )}
         </div>
       </header>
       <div className="p-4">
+        {rebuild.error && <ErrorNote error={rebuild.error} />}
+        {canRebuild && !j.operations.length && (
+          <p className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
+            This job was made before its part had a routing. Add the steps on the part (Edit part routing), then click <b>Copy routing from the part</b>.
+          </p>
+        )}
         <div className="rounded-xl ring-1 ring-line">
           <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full flex-wrap items-center gap-4 p-3 text-left hover:bg-panel-2/50">
             <div className="flex h-24 w-32 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-panel-2">

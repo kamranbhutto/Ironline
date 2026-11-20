@@ -175,8 +175,25 @@ export interface JobSummary {
   operationsDone: number;
   operationsTotal: number;
 }
+export interface PieceJob {
+  id: string;
+  number: string;
+  description: string;
+  status: string;
+  quantity: number;
+  quantityCompleted: number;
+  dueDate: string | null;
+  itemId: string | null;
+  operationsDone: number;
+  operationsTotal: number;
+  pieces: number;
+}
 export interface JobDetail extends Omit<JobSummary, "operationsDone" | "operationsTotal"> {
   itemId: string | null;
+  /** Jobs that make the pieces of this assembly. */
+  children: PieceJob[];
+  /** The assembly job this piece is made for. */
+  parent: { id: string; number: string; description: string } | null;
   notes: string | null;
   createdAt: string;
   costs: { laborEstimate: number; laborActual: number; materialEstimate: number; materialActual: number };
