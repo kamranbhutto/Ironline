@@ -118,7 +118,7 @@ export async function uploadFiles(entity: Entity, entityId: string, fs: File[]) 
 }
 
 /** Drop zone for a record that is not saved yet: files wait here and go up once it is saved. */
-export function PendingFiles({ files, onChange }: { files: File[]; onChange: (fs: File[]) => void }) {
+export function PendingFiles({ files, onChange, busy = false }: { files: File[]; onChange: (fs: File[]) => void; busy?: boolean }) {
   const [drag, setDrag] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const add = (fl: FileList | null) => fl && fl.length && onChange([...files, ...fl]);
@@ -132,12 +132,13 @@ export function PendingFiles({ files, onChange }: { files: File[]; onChange: (fs
       <input ref={input} type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => (add(e.target.files), (e.target.value = ""))} />
       <button
         type="button"
+        disabled={busy}
         onClick={() => input.current?.click()}
         className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line py-12 text-center hover:border-accent hover:bg-accent-soft/40"
       >
-        <Upload className="h-8 w-8 text-accent" />
-        <span className="text-sm font-medium">Drop drawings and 3D models here, or click to choose</span>
-        <span className="text-xs text-muted">They upload when you click Save part, then open here in 3D</span>
+        {busy ? <Loader2 className="h-8 w-8 animate-spin text-accent" /> : <Upload className="h-8 w-8 text-accent" />}
+        <span className="text-sm font-medium">{busy ? "Saving the part and uploading…" : "Drop drawings and 3D models here, or click to choose"}</span>
+        <span className="text-xs text-muted">Fill in the part number and description first: the part is saved and the drawing opens here, ready for the operations</span>
       </button>
       {files.length > 0 && (
         <ul className="divide-y divide-line rounded-lg ring-1 ring-line">

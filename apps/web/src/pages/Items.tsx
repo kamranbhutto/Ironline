@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { api, ApiError, qs, type Item, type ItemDetail, type WorkCenter } from "../api.ts";
 import { BomBuilder } from "../components/BomBuilder.tsx";
@@ -75,6 +75,7 @@ export function ItemEditorPage() {
   const [tab, setTab] = useState<PartTab>("files");
   const [fileCount, setFileCount] = useState<number | undefined>();
   const [queued, setQueued] = useState<File[]>([]);
+  const formRef = useRef<HTMLFormElement>(null);
   const uploadError = (useLocation().state as { uploadError?: string } | null)?.uploadError;
 
   useEffect(() => {
@@ -95,7 +96,7 @@ export function ItemEditorPage() {
   }, [item.data]);
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: (_files?: File[]) => {
       const body = {
         ...form,
         unitCost: Number(form.unitCost || 0),
@@ -105,15 +106,16 @@ export function ItemEditorPage() {
       };
       return id ? api<ItemDetail>(`/items/${id}`, "PUT", body) : api<ItemDetail>("/items", "POST", body);
     },
-    onSuccess: async (saved) => {
+    onSuccess: async (saved, dropped) => {
+      const toUpload = dropped ?? queued;
       qc.invalidateQueries({ queryKey: ["items"] });
       qc.setQueryData(["item", saved.id], saved);
       if (!id) {
         // Drawings dropped before the first save go up now that the part exists.
         let uploadError: string | undefined;
-        if (queued.length) {
+        if (toUpload.length) {
           try {
-            await uploadFiles("item", saved.id, queued);
+            await uploadFiles("item", saved.id, toUpload);
           } catch (e) {
             uploadError = `The part was saved, but a drawing did not upload: ${(e as Error).message}. Drop it again below.`;
           }
@@ -143,7 +145,7 @@ export function ItemEditorPage() {
   const custom = /^Q-\d+-\d+$/.test(form.partNumber);
 
   return (
-    <form onSubmit={(e) => (e.preventDefault(), save.mutate())}>
+    <form ref={formRef} onSubmit={(e) => (e.preventDefault(), save.mutate(undefined))}>
       <DetailTitle
         parent={{ to: "/items", label: "Parts & materials" }}
         title={id ? <>{form.partNumber}<span className="font-normal text-muted"> rev {form.revision}</span></> : "New part"}
@@ -229,7 +231,19 @@ export function ItemEditorPage() {
             (id ? (
               <FilesPanel entity="item" entityId={id} height={460} onCount={setFileCount} />
             ) : (
-              <PendingFiles files={queued} onChange={setQueued} />
+              <PendingFiles
+                files={queued}
+                busy={save.isPending}
+                onChange={(fs) => {
+                  // Drawing first: once the part has a number and description, a dropped drawing
+                  // saves the part straight away and opens in the viewer, ready for the routing.
+                  if (fs.length > queued.length && form.partNumber.trim() && form.description.trim() && formRef.current?.checkValidity()) {
+                    save.mutate(fs);
+                  } else {
+                    setQueued(fs);
+                  }
+                }}
+              />
             ))}
           {tab === "stock" && id && <PartStock itemId={id} />}
           {tab === "cost" && (
