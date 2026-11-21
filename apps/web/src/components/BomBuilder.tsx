@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, ChevronRight, ChevronUp, GripVertical, Pencil, Plus, Search, ShoppingCart, Trash2, Wrench, X } from "lucide-react";
 import { useState, type DragEvent } from "react";
-import { Link } from "react-router";
 import { api, type Item, type ItemDetail, type WorkCenter } from "../api.ts";
 import { money, num } from "../format.ts";
 import { PartThumb } from "./PartThumb.tsx";
+import { NewComponentModal, NewOperationModal } from "./QuickCreate.tsx";
+import { Link } from "react-router";
 import { Button, cx } from "./ui.tsx";
 
 export type BuilderOp = { workCenterId: string; description: string; setupHours: string; runHoursPerUnit: string };
@@ -221,6 +222,7 @@ export function BomBuilder(p: {
   const [make, setMake] = useState(true);
   const [sel, setSel] = useState<number | null>(null);
   const [dropOver, setDropOver] = useState(false);
+  const [creating, setCreating] = useState<null | "op" | "part" | "material">(null);
 
   const wc = (id: string) => p.workCenters.find((w) => w.id === id);
   const components = p.parts.filter((x) => x.id !== p.partId);
@@ -334,16 +336,20 @@ export function BomBuilder(p: {
                   ))}
                 </div>
                 <label className="mt-3 flex items-center gap-2 rounded-lg bg-panel px-2.5 py-2 ring-1 ring-line">
-                  <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={lib === "ops" ? "Search operations" : "Search parts"} className="min-w-0 flex-1 bg-transparent text-sm outline-none" aria-label="Search the library" />
+                  <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={lib === "ops" ? "Search operations" : lib === "materials" ? "Search materials" : "Search parts"} className="min-w-0 flex-1 bg-transparent text-sm outline-none" aria-label="Search the library" />
                   <Search className="h-4 w-4 text-muted" aria-hidden />
                 </label>
-                {lib === "items" && (
-                  <div className="mt-2 flex items-center gap-4 text-sm">
-                    <label className="flex items-center gap-1.5"><input type="checkbox" checked={buy} onChange={(e) => setBuy(e.target.checked)} /> Buy</label>
-                    <label className="flex items-center gap-1.5"><input type="checkbox" checked={make} onChange={(e) => setMake(e.target.checked)} /> Make</label>
-                    <Link to="/items/new" className="ml-auto inline-flex items-center gap-1 text-accent hover:underline"><Plus className="h-3.5 w-3.5" /> New part</Link>
-                  </div>
-                )}
+                <div className="mt-2 flex items-center gap-4 text-sm">
+                  {lib === "items" && (
+                    <>
+                      <label className="flex items-center gap-1.5"><input type="checkbox" checked={buy} onChange={(e) => setBuy(e.target.checked)} /> Buy</label>
+                      <label className="flex items-center gap-1.5"><input type="checkbox" checked={make} onChange={(e) => setMake(e.target.checked)} /> Make</label>
+                    </>
+                  )}
+                  <button type="button" onClick={() => setCreating(lib === "ops" ? "op" : lib === "materials" ? "material" : "part")} className="ml-auto inline-flex items-center gap-1 font-medium text-accent hover:underline">
+                    <Plus className="h-3.5 w-3.5" /> {lib === "ops" ? "New operation" : lib === "materials" ? "New material" : "New part"}
+                  </button>
+                </div>
                 <ul className="mt-3 max-h-[520px] space-y-1.5 overflow-y-auto pr-1">
                   {lib === "ops"
                     ? libOps.map((w) => (
@@ -371,12 +377,19 @@ export function BomBuilder(p: {
                           </li>
                         );
                       })}
-                  {(lib === "ops" ? libOps : libItems).length === 0 && <li className="py-6 text-center text-sm text-muted">{lib === "ops" ? "No matching work centers." : "No matching parts."}</li>}
+                  {(lib === "ops" ? libOps : libItems).length === 0 && <li className="py-6 text-center text-sm text-muted">{lib === "ops" ? "No matching operations. Use + New operation above." : lib === "materials" ? "No matching materials. Use + New material above." : "No matching parts. Use + New part above."}</li>}
                 </ul>
               </>
             )}
           </aside>
         )}
+        <NewOperationModal open={creating === "op"} onClose={() => setCreating(null)} onCreated={(w) => (setCreating(null), setQ(""), addOp(w.id))} />
+        <NewComponentModal
+          open={creating === "part" || creating === "material"}
+          kind={creating === "material" ? "material" : "part"}
+          onClose={() => setCreating(null)}
+          onCreated={(x) => (setCreating(null), setQ(""), addPart(x.id))}
+        />
 
         <div
           className={cx("min-w-0 space-y-2 p-4", dropOver && "bg-accent-soft/40")}
