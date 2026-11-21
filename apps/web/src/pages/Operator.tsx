@@ -5,6 +5,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlarmClock,
   ArrowDown,
   ArrowUp,
   Camera,
@@ -127,6 +128,8 @@ export function OperatorPage() {
   const [expanded, setExpanded] = useState(false);
   const [focusChar, setFocusChar] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  // The timer session the operator chose to keep running past the planned time.
+  const [keepGoing, setKeepGoing] = useState<string | null>(null);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
@@ -171,6 +174,10 @@ export function OperatorPage() {
   const setupSecs = d.actual.setupSeconds + (d.openEntry?.kind === "setup" ? drift : 0);
   const laborSecs = d.actual.laborSeconds + (d.openEntry?.kind === "labor" ? drift : 0);
   const machineSecs = d.actual.machineSeconds + (d.openEntry?.kind === "run" ? drift : 0);
+  // Timers never stop by themselves (they record real time), but the operator is told when
+  // the running one passes its planned time and can pause it or carry on.
+  const plannedFor = d.openEntry ? (d.openEntry.kind === "setup" ? { label: "setup", used: setupSecs, planned: d.estimate.setupSeconds } : { label: "run", used: laborSecs + machineSecs, planned: d.estimate.runSeconds }) : null;
+  const overPlan = plannedFor && plannedFor.planned > 0 && plannedFor.used > plannedFor.planned && keepGoing !== d.openEntry!.id ? plannedFor : null;
   const canWork = ["released", "in_progress"].includes(d.job.status) && ["ready", "running"].includes(d.operation.status);
   const hasWork = d.actual.setupSeconds + d.actual.runSeconds > 0 || d.operation.quantityGood > 0 || running;
   const busy = start.isPending || stop.isPending || count.isPending;
@@ -233,6 +240,20 @@ export function OperatorPage() {
           <ChatButton jobId={d.job.id} active={side === "chat"} onClick={() => toggle("chat")} />
         </nav>
       </div>
+
+      {overPlan && (
+        <div role="alert" className="absolute left-1/2 top-[124px] z-30 flex w-[min(560px,calc(100%-2rem))] -translate-x-1/2 flex-wrap items-center gap-3 rounded-2xl bg-[#fff4e6] px-4 py-3 text-[#5c2f00] shadow-[0_10px_28px_rgba(0,0,0,0.18)] ring-2 ring-[#f0a35e]">
+          <AlarmClock className="h-7 w-7 shrink-0 text-[#e0700f]" aria-hidden />
+          <div className="min-w-0 flex-1 leading-snug">
+            <div className="font-semibold">Planned {overPlan.label} time reached</div>
+            <div className="num text-sm">
+              Planned {clock(overPlan.planned)}, now {clock(overPlan.used)}: {clock(overPlan.used - overPlan.planned)} over
+            </div>
+          </div>
+          <button type="button" onClick={() => setKeepGoing(d.openEntry!.id)} className="rounded-xl px-3 py-2 text-sm font-medium hover:bg-[#ffe3c2]">Keep going</button>
+          <button type="button" disabled={stop.isPending} onClick={() => stop.mutate()} className="rounded-xl bg-[#e0700f] px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50">Pause timer</button>
+        </div>
+      )}
 
       {/* Left: run the work */}
       <aside className={cx(card, "absolute left-4 top-[124px] z-10 flex max-h-[calc(100%-140px)] w-[226px] flex-col gap-3 overflow-y-auto bg-[#f4f5f7]/95 p-3 backdrop-blur")}>
@@ -392,13 +413,24 @@ function Meter({ icon: Icon, label, value, total, qty = false }: { icon?: Lucide
             style={{ width: `max(30px, ${Math.min(100, pct)}%)` }}
           />
         )}
-        <div className="num relative flex h-full items-center justify-between px-3 text-sm">
-          <span>
-            <span className="sr-only">{label}: </span>
-            {qty ? `${num(value, 4)} / ${num(total, 4)}` : `${clock(value)} / ${clock(total)}`}
-          </span>
-          <span className={cx(over && "font-semibold")}>{pct}%</span>
-        </div>
+        {/* The text is drawn twice: in the theme colour on the empty track, and dark over the
+            light fill, so it stays readable in both themes. */}
+        {[false, true].map((onFill) =>
+          onFill && !started ? null : (
+            <div
+              key={String(onFill)}
+              aria-hidden={onFill || undefined}
+              className={cx("num absolute inset-0 flex items-center justify-between px-3 text-sm", onFill && "text-[#1b2430]")}
+              style={onFill ? { clipPath: `inset(0 calc(100% - max(30px, ${Math.min(100, pct)}%)) 0 0)` } : undefined}
+            >
+              <span>
+                {!onFill && <span className="sr-only">{label}: </span>}
+                {qty ? `${num(value, 4)} / ${num(total, 4)}` : `${clock(value)} / ${clock(total)}`}
+              </span>
+              <span className={cx(over && "font-semibold")}>{pct}%</span>
+            </div>
+          ),
+        )}
       </div>
     </div>
   );
