@@ -25,12 +25,26 @@ const COLORS = {
 };
 
 type Block = { x: number; y: number; z: number; l: number; h: number; w: number; tone?: number };
+/** One part's slot: centre, size along world x / y (up) / z, and whether it is turned 90° on the floor. */
+type Slot = { x: number; y: number; z: number; sx: number; sy: number; sz: number; yaw: boolean };
+
+/** How the pictures look: colours, edges, and the part's real shape when there is a 3D model. */
+export interface PackLook {
+  partGeometry?: THREE.BufferGeometry | null;
+  part?: string;
+  board?: string;
+  container?: string;
+  edges?: boolean;
+}
+/** Most triangles drawn for real part shapes; beyond this the parts are shown as blocks. */
+const MAX_PART_TRIANGLES = 4_000_000;
 
 /** Blocks for the chosen view. */
 function blocks(o: PackOption, mode: PackViewMode, explode: number) {
   const items: Block[] = [];
   const deck: Block[] = [];
   const board: Block[] = [];
+  const slots: Slot[] = [];
   let frame: Block | null = null;
   const box = o.box;
   if (mode === "box") {
@@ -47,6 +61,12 @@ function blocks(o: PackOption, mode: PackViewMode, explode: number) {
         if (left <= 0 || items.length >= MAX_BLOCKS) break;
         const shrink = cells ? 0.88 : 0.94;
         items.push({ x: r.x + r.l / 2, y: y0 + height / 2, z: r.y + r.w / 2, l: (r.l - div * 2) * shrink, h: height * (box.perStack > 1 ? 0.99 : shrink), w: (r.w - div * 2) * shrink, tone: k % 2 });
+        // Real-shape slots: one per part, nested copies stacked by their step.
+        const yaw = Math.abs(r.l - box.cell.l) > 0.01;
+        const inset = 0.97;
+        for (let n = 0; n < Math.min(box.perStack, left); n++) {
+          slots.push({ x: r.x + r.l / 2, y: y0 + n * (box.perStack > 1 ? box.layerStep : 0) + ch / 2, z: r.y + r.w / 2, sx: (r.l - div * 2 - 2) * inset, sy: (ch - 2) * inset, sz: (r.w - div * 2 - 2) * inset, yaw });
+        }
         left -= box.perStack;
       }
       // A pad on top of every layer but the last.
@@ -87,7 +107,40 @@ function blocks(o: PackOption, mode: PackViewMode, explode: number) {
     }
     frame = { x: v.l / 2, y: v.h / 2, z: v.w / 2, l: v.l, h: v.h, w: v.w };
   }
-  return { items, deck, board, frame };
+  return { items, deck, board, frame, slots };
+}
+
+/**
+ * Copies of the real part, one per slot. The geometry is a unit cube in its own frame (longest
+ * side x, middle z, shortest y); each copy is turned the way the packing maths stood it up
+ * (vertical h / w / l, plus 90° on the floor) and stretched to its slot.
+ */
+function partCopies(o: PackOption, slots: Slot[], geometry: THREE.BufferGeometry, color: string) {
+  const v = o.box.vertical;
+  // World direction of each of the part's own axes (x = length, y = height, z = width).
+  const basis =
+    v === "h"
+      ? [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)]
+      : v === "w"
+        ? [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 1, 0)]
+        : [new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0)];
+  const turn = new THREE.Matrix4().makeRotationY(Math.PI / 2);
+  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.45, metalness: 0.15 });
+  const mesh = new THREE.InstancedMesh(geometry, mat, Math.max(1, slots.length));
+  const m = new THREE.Matrix4();
+  const rot = new THREE.Matrix4();
+  const scale = new THREE.Matrix4();
+  slots.forEach((sl, i) => {
+    const dirs = basis.map((d) => (sl.yaw ? d.clone().applyMatrix4(turn) : d.clone()));
+    rot.makeBasis(dirs[0]!, dirs[1]!, dirs[2]!);
+    const along = (d: THREE.Vector3) => Math.abs(d.x) * sl.sx + Math.abs(d.y) * sl.sy + Math.abs(d.z) * sl.sz;
+    scale.makeScale(along(dirs[0]!), along(dirs[1]!), along(dirs[2]!));
+    m.makeTranslation(sl.x, sl.y, sl.z).multiply(rot).multiply(scale);
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.count = slots.length;
+  mesh.castShadow = true;
+  return mesh;
 }
 
 function instanced(list: Block[], color: number, alt?: number, opacity = 1) {
@@ -121,25 +174,39 @@ function edges(list: Block[], color: number, opacity = 0.45) {
 }
 
 /** The load as one group, centred on the floor at the origin, and its size. */
-export function buildPackGroup(option: PackOption, mode: PackViewMode, explode = 0, dunnage = true) {
-  const { items, frame, deck, board } = blocks(option, mode, explode);
+/** True when the real part shape will be drawn for this option (a model is loaded and not too heavy). */
+export const drawsRealParts = (o: PackOption, look?: PackLook) =>
+  !!look?.partGeometry && (look.partGeometry.getAttribute("position").count / 3) * o.box.count <= MAX_PART_TRIANGLES;
+
+export function buildPackGroup(option: PackOption, mode: PackViewMode, explode = 0, dunnage = true, look: PackLook = {}) {
+  const { items, frame, deck, board, slots } = blocks(option, mode, explode);
   const group = new THREE.Group();
-  const itemColor = mode === "box" ? COLORS.part : mode === "pallet" ? COLORS[option.container.kind] : COLORS.wrap;
-  group.add(instanced(items, itemColor, mode === "box" ? COLORS.partAlt : undefined));
-  if (items.length <= 1500) group.add(edges(items, 0x1b2430, mode === "box" ? 0.35 : 0.5));
+  const hex = (c: string | undefined, fallback: number) => (c ? new THREE.Color(c).getHex() : fallback);
+  const partColor = hex(look.part, COLORS.part);
+  const boardColor = hex(look.board, COLORS.board);
+  const containerColor = hex(look.container, COLORS[option.container.kind]);
+  const showEdges = look.edges !== false;
+  if (mode === "box" && drawsRealParts(option, look)) {
+    group.add(partCopies(option, slots, look.partGeometry!, `#${partColor.toString(16).padStart(6, "0")}`));
+  } else {
+    const itemColor = mode === "box" ? partColor : containerColor;
+    const alt = mode === "box" ? new THREE.Color(partColor).offsetHSL(0, 0, 0.08).getHex() : undefined;
+    group.add(instanced(items, itemColor, alt));
+    if (showEdges && items.length <= 1500) group.add(edges(items, 0x1b2430, mode === "box" ? 0.35 : 0.5));
+  }
   if (deck.length) group.add(instanced(deck, COLORS.deck));
   if (dunnage && board.length) {
-    group.add(instanced(board, COLORS.board, undefined, 0.92));
-    group.add(edges(board, 0x6b4d26, 0.5));
+    group.add(instanced(board, boardColor, undefined, 0.92));
+    if (showEdges) group.add(edges(board, new THREE.Color(boardColor).offsetHSL(0, 0, -0.25).getHex(), 0.5));
   }
   if (frame) {
     const wall = new THREE.Mesh(
       new THREE.BoxGeometry(frame.l, frame.h, frame.w),
-      new THREE.MeshStandardMaterial({ color: mode === "box" ? COLORS[option.container.kind] : 0x9aa4ae, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.BackSide }),
+      new THREE.MeshStandardMaterial({ color: mode === "box" ? containerColor : 0x9aa4ae, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.BackSide }),
     );
     wall.position.set(frame.x, frame.y, frame.z);
     group.add(wall);
-    group.add(edges([frame], mode === "box" ? 0x8a6a3c : 0x5b6673, 0.8));
+    group.add(edges([frame], mode === "box" ? new THREE.Color(containerColor).offsetHSL(0, 0, -0.2).getHex() : 0x5b6673, 0.9));
   }
   const bounds = new THREE.Box3().setFromObject(group);
   const centre = bounds.getCenter(new THREE.Vector3());
@@ -165,11 +232,11 @@ function lights(scene: THREE.Scene, radius: number, floorShadow = true) {
   scene.add(floor);
 }
 
-function dispose(scene: THREE.Scene) {
+function dispose(scene: THREE.Scene, keep?: THREE.BufferGeometry | null) {
   scene.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.geometry && !(o instanceof THREE.Sprite)) return;
-    m.geometry?.dispose();
+    if (m.geometry !== keep) m.geometry?.dispose();
     const mats = (Array.isArray(m.material) ? m.material : m.material ? [m.material] : []) as THREE.Material[];
     mats.forEach((mat) => {
       (mat as THREE.SpriteMaterial).map?.dispose();
@@ -211,7 +278,7 @@ function makeGizmo() {
   return { scene, camera };
 }
 
-export function PackView3D({ option, mode, explode = 0, dunnage = true, className }: { option: PackOption; mode: PackViewMode; explode?: number; dunnage?: boolean; className?: string }) {
+export function PackView3D({ option, mode, explode = 0, dunnage = true, look, className }: { option: PackOption; mode: PackViewMode; explode?: number; dunnage?: boolean; look?: PackLook; className?: string }) {
   const host = useRef<HTMLDivElement>(null);
   const camState = useRef<{ mode: PackViewMode; pos: THREE.Vector3; target: THREE.Vector3; moved: boolean } | null>(null);
 
@@ -225,7 +292,7 @@ export function PackView3D({ option, mode, explode = 0, dunnage = true, classNam
     el.appendChild(renderer.domElement);
     renderer.domElement.style.display = "block";
     const scene = new THREE.Scene();
-    const { group, size } = buildPackGroup(option, mode, explode, dunnage);
+    const { group, size } = buildPackGroup(option, mode, explode, dunnage, look);
     scene.add(group);
     const radius = Math.max(size.length() / 2, 1);
     lights(scene, radius);
@@ -294,12 +361,12 @@ export function PackView3D({ option, mode, explode = 0, dunnage = true, classNam
       cancelAnimationFrame(raf);
       ro.disconnect();
       controls.dispose();
-      dispose(scene);
+      dispose(scene, look?.partGeometry);
       dispose(gizmo.scene);
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [option, mode, explode, dunnage]);
+  }, [option, mode, explode, dunnage, look]);
 
   return <div ref={host} className={className} role="img" aria-label={mode === "box" ? "Parts inside the container" : mode === "pallet" ? "Containers on the pallet" : "Pallets in the truck"} />;
 }
@@ -308,16 +375,16 @@ export function PackView3D({ option, mode, explode = 0, dunnage = true, classNam
  * Still pictures for the packing report: perspective, front, side or top, as PNG data URLs.
  * Front looks along the width (shows length × height), side along the length, top straight down.
  */
-export function renderStills(option: PackOption, shots: { mode: PackViewMode; view: StillView }[], width = 640, height = 440): string[] {
+export function renderStills(option: PackOption, shots: { mode: PackViewMode | "part"; view: StillView; look?: PackLook; background?: string; partDims?: [number, number, number] }[], width = 640, height = 440): string[] {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
   renderer.setSize(width, height, false);
-  renderer.setClearColor(0xffffff, 1);
   renderer.shadowMap.enabled = true;
   const out: string[] = [];
   try {
     for (const shot of shots) {
+      renderer.setClearColor(new THREE.Color(shot.background ?? "#ffffff"), 1);
       const scene = new THREE.Scene();
-      const { group, size } = buildPackGroup(option, shot.mode, 0, true);
+      const { group, size } = shot.mode === "part" ? partAlone(shot.look, shot.partDims) : buildPackGroup(option, shot.mode, 0, true, shot.look);
       scene.add(group);
       const radius = Math.max(size.length() / 2, 1);
       lights(scene, radius, shot.view === "iso");
@@ -347,11 +414,79 @@ export function renderStills(option: PackOption, shots: { mode: PackViewMode; vi
         camera = cam;
       }
       renderer.render(scene, camera);
-      out.push(renderer.domElement.toDataURL("image/png"));
-      dispose(scene);
+      out.push(renderer.domElement.toDataURL("image/jpeg", 0.9));
+      dispose(scene, shot.look?.partGeometry);
     }
   } finally {
     renderer.dispose();
   }
+  return out;
+}
+
+/** The part on its own, at its real size if known (for the report's part picture). */
+function partAlone(look?: PackLook, dims?: [number, number, number]) {
+  const group = new THREE.Group();
+  const d = dims ?? [200, 150, 100];
+  if (look?.partGeometry) {
+    const mesh = new THREE.Mesh(look.partGeometry, new THREE.MeshStandardMaterial({ color: new THREE.Color(look.part ?? "#3f7fe0"), roughness: 0.45, metalness: 0.15 }));
+    mesh.scale.set(d[0], d[2], d[1]);
+    mesh.position.y = d[2] / 2;
+    mesh.castShadow = true;
+    group.add(mesh);
+  } else {
+    group.add(instanced([{ x: 0, y: d[2] / 2, z: 0, l: d[0], h: d[2], w: d[1] }], new THREE.Color(look?.part ?? "#3f7fe0").getHex()));
+  }
+  const bounds = new THREE.Box3().setFromObject(group);
+  return { group, size: bounds.getSize(new THREE.Vector3()) };
+}
+
+/** The current view as a 3D file (STL or GLB) to download: every copy becomes real geometry. */
+export async function exportView(option: PackOption, mode: PackViewMode, look: PackLook, format: "stl" | "glb"): Promise<Blob> {
+  const { group } = buildPackGroup(option, mode, 0, true, { ...look, edges: false });
+  const out = new THREE.Group();
+  group.updateMatrixWorld(true);
+  group.traverse((o) => {
+    if (o instanceof THREE.InstancedMesh) {
+      const m = new THREE.Matrix4();
+      const geos: THREE.BufferGeometry[] = [];
+      for (let i = 0; i < o.count; i++) {
+        o.getMatrixAt(i, m);
+        let g = o.geometry.clone();
+        if (g.index) g = g.toNonIndexed();
+        for (const k of Object.keys(g.attributes)) if (k !== "position" && k !== "normal") g.deleteAttribute(k);
+        geos.push(g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(o.matrixWorld, m)));
+      }
+      if (geos.length) out.add(new THREE.Mesh(mergeAll(geos), (o.material as THREE.Material).clone()));
+    } else if (o instanceof THREE.Mesh && !(o.material as THREE.Material).transparent) {
+      out.add(new THREE.Mesh(o.geometry.clone().applyMatrix4(o.matrixWorld), (o.material as THREE.Material).clone()));
+    }
+  });
+  if (format === "stl") {
+    const { STLExporter } = await import("three/examples/jsm/exporters/STLExporter.js");
+    const data = new STLExporter().parse(out, { binary: true }) as unknown as DataView;
+    return new Blob([data.buffer as ArrayBuffer], { type: "model/stl" });
+  }
+  const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+  const glb = (await new GLTFExporter().parseAsync(out, { binary: true })) as ArrayBuffer;
+  return new Blob([glb], { type: "model/gltf-binary" });
+}
+
+/** Join many simple geometries (position and normal only) into one. */
+function mergeAll(list: THREE.BufferGeometry[]) {
+  const total = list.reduce((a, g) => a + g.getAttribute("position").count, 0);
+  const pos = new Float32Array(total * 3);
+  const nor = new Float32Array(total * 3);
+  let at = 0;
+  for (const g of list) {
+    const p = g.getAttribute("position").array as Float32Array;
+    pos.set(p, at * 3);
+    const n = g.getAttribute("normal");
+    if (n) nor.set(n.array as Float32Array, at * 3);
+    at += g.getAttribute("position").count;
+    g.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  out.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
   return out;
 }

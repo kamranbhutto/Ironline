@@ -22,12 +22,13 @@ import {
   type PackVehicle,
 } from "@ironline/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Award, BarChart3, Box, Boxes, Check, ChevronRight, Eye, EyeOff, FileText, Pencil, Plus, Printer, Ruler, SlidersHorizontal, Sparkles } from "lucide-react";
+import { ArrowLeft, Award, BarChart3, Box, Boxes, Check, ChevronRight, Download, Eye, EyeOff, FileDown, FileText, Grid3x3, Maximize2, Palette, Pencil, Plus, Printer, Ruler, Shapes, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { api, ApiError, type Item, type ItemDetail, type PackAsset, type PackSpec } from "../api.ts";
 import { FilePreview, fileUrl, type FileRow } from "../components/Files.tsx";
-import { PackView3D, renderStills, type PackViewMode } from "../components/PackView3D.tsx";
+import { drawsRealParts, exportView, PackView3D, renderStills, type PackLook, type PackViewMode } from "../components/PackView3D.tsx";
+import type { BufferGeometry } from "three";
 import { Badge, Button, Card, cx, ErrorNote, Field, Input, Loading, Modal, R, Select, Table, Td, Textarea, ViewTabs } from "../components/ui.tsx";
 import { money, num } from "../format.ts";
 
@@ -95,6 +96,11 @@ export function PackingStudio() {
   const [open, setOpen] = useState<Record<Section, boolean>>({ part: true, pack: true, limits: false, ship: false, returnables: false, compare: false });
   const [palletFilter, setPalletFilter] = useState<string | null>(null);
   const [report, setReport] = useState(false);
+  const [colors, setColors] = useState({ part: "#3f7fe0", board: "#c7a06a", container: "#c9a36b" });
+  const [realParts, setRealParts] = useState(true);
+  const [partGeo, setPartGeo] = useState<{ id: string; geometry: BufferGeometry; triangles: number } | null>(null);
+  const [geoNote, setGeoNote] = useState<string | null>(null);
+  const [menu, setMenu] = useState<null | "colors" | "download">(null);
 
   const active = useMemo(() => (assets.data ?? []).filter((a) => a.active), [assets.data]);
 
@@ -200,6 +206,34 @@ export function PackingStudio() {
   });
 
   const model = (files.data ?? []).find((f) => f.kind === "cad" || f.kind === "mesh");
+  // The part's real shape, for drawing it inside the container (loaded once per model).
+  useEffect(() => {
+    if (!model || partGeo?.id === model.id) return;
+    if (model.kind === "cad" && model.preview !== "ready") return;
+    let alive = true;
+    setGeoNote("Loading the part's 3D model…");
+    import("../components/Viewer3D.tsx")
+      .then(({ loadPartGeometry }) => loadPartGeometry(model.kind === "cad" ? `${fileUrl(model.id)}/preview` : fileUrl(model.id), model.fileName, model.kind === "cad"))
+      .then((r) => alive && (setPartGeo({ id: model.id, geometry: r.geometry, triangles: r.triangles }), setGeoNote(null)))
+      .catch((e: Error) => alive && setGeoNote(`3D model not drawn: ${e.message}`));
+    return () => {
+      alive = false;
+    };
+  }, [model?.id, model?.preview]); // eslint-disable-line react-hooks/exhaustive-deps
+  const look: PackLook = useMemo(
+    () => ({ partGeometry: realParts && partGeo && model && partGeo.id === model.id ? partGeo.geometry : null, part: colors.part, board: colors.board, container: colors.container }),
+    [realParts, partGeo, model, colors],
+  );
+  const download = async (format: "stl" | "glb") => {
+    if (!sel) return;
+    setMenu(null);
+    const blob = await exportView(sel, mode, look, format);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(item.data?.partNumber ?? "packing").replace(/[^\w.-]+/g, "_")}-${mode}.${format}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
   const measure = async () => {
     if (!model) return;
     setMeasuring("Measuring the 3D model…");
@@ -391,7 +425,7 @@ export function PackingStudio() {
         <section className="relative min-h-[420px] overflow-hidden bg-gradient-to-b from-panel-2 to-bg lg:min-h-0">
           {sel ? (
             <div data-packview className="absolute inset-0">
-              <PackView3D option={sel} mode={mode} explode={explode} dunnage={dunnage} className="h-full w-full" />
+              <PackView3D option={sel} mode={mode} explode={explode} dunnage={dunnage} look={look} className="h-full w-full" />
             </div>
           ) : itemId && model && !packPart ? (
             <div className="absolute inset-0"><FilePreview file={model} immersive /></div>
@@ -410,6 +444,8 @@ export function PackingStudio() {
                   {mode === "pallet" && `${sel.pallet.name} · ${sel.palletLoad.boxes} containers · ${num(sel.pallet.l, 0)} × ${num(sel.pallet.w, 0)} × ${num(sel.palletLoad.height, 0)} mm`}
                   {mode === "truck" && `${sel.vehicle.name} · ${sel.load.pallets} pallets · ${num(sel.partsPerLoad, 0)} parts · ${num(truckFill(sel) * 100, 0)}% of the space`}
                 </div>
+                {geoNote && <div className="text-xs text-muted">{geoNote}</div>}
+                {mode === "box" && realParts && look.partGeometry && !drawsRealParts(sel, look) && <div className="text-xs text-warn">Too many parts to draw their real shape here; shown as blocks.</div>}
               </div>
               <div className="pointer-events-none absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
                 <div className="pointer-events-auto flex flex-wrap items-end gap-2">
@@ -431,6 +467,39 @@ export function PackingStudio() {
                     <input type="range" min={0} max={1} step={0.05} value={explode} onChange={(e) => setExplode(Number(e.target.value))} />
                   </label>
                 )}
+                {mode === "box" && model && (
+                  <button type="button" aria-pressed={realParts} onClick={() => setRealParts(!realParts)} title={realParts ? "Show parts as blocks" : "Show the real part shape"} className={cx("inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm shadow-panel ring-1 ring-line", realParts ? "bg-accent-soft text-accent" : "bg-panel hover:bg-panel-2")}>
+                    <Shapes className="h-4 w-4" /> {realParts ? "Real part" : "Blocks"}
+                  </button>
+                )}
+                <div className="relative">
+                  <button type="button" aria-expanded={menu === "colors"} onClick={() => setMenu(menu === "colors" ? null : "colors")} className="inline-flex items-center gap-1.5 rounded-lg bg-panel px-3 py-2 text-sm shadow-panel ring-1 ring-line hover:bg-panel-2" title="Colours">
+                    <Palette className="h-4 w-4" /> Colours
+                  </button>
+                  {menu === "colors" && (
+                    <div className="absolute bottom-full left-0 mb-2 w-56 space-y-2 rounded-lg bg-panel p-3 shadow-panel ring-1 ring-line">
+                      {([["part", "Part"], ["board", "Dividers and pads"], ["container", "Container"]] as const).map(([k, l]) => (
+                        <label key={k} className="flex items-center justify-between gap-2 text-sm">
+                          {l}
+                          <input type="color" value={colors[k]} onChange={(e) => setColors({ ...colors, [k]: e.target.value })} className="h-7 w-10 cursor-pointer rounded border-0 bg-transparent" />
+                        </label>
+                      ))}
+                      <button type="button" className="text-xs text-accent hover:underline" onClick={() => setColors({ part: "#3f7fe0", board: "#c7a06a", container: "#c9a36b" })}>Reset colours</button>
+                    </div>
+                  )}
+                </div>
+                <div className="relative">
+                  <button type="button" aria-expanded={menu === "download"} onClick={() => setMenu(menu === "download" ? null : "download")} className="inline-flex items-center gap-1.5 rounded-lg bg-panel px-3 py-2 text-sm shadow-panel ring-1 ring-line hover:bg-panel-2" title="Download 3D">
+                    <Download className="h-4 w-4" /> 3D
+                  </button>
+                  {menu === "download" && (
+                    <div className="absolute bottom-full left-0 mb-2 w-60 rounded-lg bg-panel p-1 text-sm shadow-panel ring-1 ring-line">
+                      {model && <a href={fileUrl(model.id, true)} onClick={() => setMenu(null)} className="block rounded-md px-3 py-2 hover:bg-panel-2">Part model ({model.fileName.split(".").pop()?.toUpperCase()})</a>}
+                      <button type="button" onClick={() => download("stl")} className="block w-full rounded-md px-3 py-2 text-left hover:bg-panel-2">This {mode === "box" ? "box" : mode} as STL</button>
+                      <button type="button" onClick={() => download("glb")} className="block w-full rounded-md px-3 py-2 text-left hover:bg-panel-2">This {mode === "box" ? "box" : mode} as GLB (with colours)</button>
+                    </div>
+                  )}
+                </div>
                 </div>
                 <div className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-right text-accent-ink shadow-panel">
                   <div className="text-[11px] opacity-85">Cost per part</div>
@@ -502,7 +571,7 @@ export function PackingStudio() {
           </div>
         </aside>
       </div>
-      {report && sel && <ReportModal o={sel} item={item.data ?? null} part={packPart!} study={study} onClose={() => setReport(false)} />}
+      {report && sel && <ReportModal o={sel} item={item.data ?? null} part={packPart!} study={study} look={look} onClose={() => setReport(false)} />}
     </div>
   );
 }
@@ -674,37 +743,76 @@ function Num({ label, value, onChange, hint, step = "any" }: { label: string; va
 
 // ── Packing report ──────────────────────────────────────────────────────────
 
-/** Preview of the one-page packing report: add a title and notes, then print or save as PDF. */
-function ReportModal({ o, item, part, study, onClose }: { o: PackOption; item: ItemDetail | null; part: PackPart; study: Study; onClose: () => void }) {
+type ReportSection = "part" | "box" | "pallet" | "truck";
+type SectionLook = { color: string; edges: boolean };
+
+/**
+ * Preview of the packing report. Title and notes; each section can be left out; each picture has
+ * small buttons to change its colour, turn edges on or off, and view it full size. Print it, or
+ * download it as a PDF file. The pictures are drawn from the real part model when there is one.
+ */
+function ReportModal({ o, item, part, study, look, onClose }: { o: PackOption; item: ItemDetail | null; part: PackPart; study: Study; look: PackLook; onClose: () => void }) {
   const [title, setTitle] = useState(item ? `Packing for ${item.partNumber}` : "Packing study");
   const [notes, setNotes] = useState("");
-  const [shots, setShots] = useState<string[] | null>(null);
+  const [background, setBackground] = useState("#ffffff");
+  const [include, setInclude] = useState<Record<ReportSection | "costs", boolean>>({ part: true, box: true, pallet: true, truck: true, costs: true });
+  const [looks, setLooks] = useState<Record<ReportSection, SectionLook>>({
+    part: { color: look.part ?? "#3f7fe0", edges: true },
+    box: { color: look.part ?? "#3f7fe0", edges: true },
+    pallet: { color: look.container ?? "#c9a36b", edges: true },
+    truck: { color: look.container ?? "#c9a36b", edges: true },
+  });
+  const [pics, setPics] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(true);
+  const [full, setFull] = useState<string | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  // Pictures per section; redrawn (shortly after a change) when a colour, edges or background changes.
   useEffect(() => {
-    // Draw the pictures once the dialog is on screen.
+    setBusy(true);
     const t = setTimeout(() => {
+      const base = { partGeometry: look.partGeometry, board: look.board };
+      const shots: { key: string; mode: PackViewMode | "part"; view: "iso" | "front" | "side" | "top"; s: ReportSection }[] = [
+        { key: "part", mode: "part", view: "iso", s: "part" },
+        { key: "boxIso", mode: "box", view: "iso", s: "box" },
+        { key: "boxFront", mode: "box", view: "front", s: "box" },
+        { key: "boxSide", mode: "box", view: "side", s: "box" },
+        { key: "boxTop", mode: "box", view: "top", s: "box" },
+        { key: "palletIso", mode: "pallet", view: "iso", s: "pallet" },
+        { key: "palletSide", mode: "pallet", view: "side", s: "pallet" },
+        { key: "palletTop", mode: "pallet", view: "top", s: "pallet" },
+        { key: "truckIso", mode: "truck", view: "iso", s: "truck" },
+      ];
       try {
-        setShots(
-          renderStills(o, [
-            { mode: "box", view: "iso" },
-            { mode: "box", view: "front" },
-            { mode: "box", view: "side" },
-            { mode: "box", view: "top" },
-            { mode: "pallet", view: "iso" },
-            { mode: "pallet", view: "side" },
-            { mode: "pallet", view: "top" },
-            { mode: "truck", view: "iso" },
-          ]),
+        const urls = renderStills(
+          o,
+          shots.map((x) => ({
+            mode: x.mode,
+            view: x.view,
+            background,
+            partDims: [part.l, part.w, part.h] as [number, number, number],
+            look: {
+              ...base,
+              edges: looks[x.s].edges,
+              part: x.s === "part" || x.s === "box" ? looks[x.s].color : look.part,
+              container: x.s === "pallet" || x.s === "truck" ? looks[x.s].color : look.container,
+            },
+          })),
         );
+        setPics(Object.fromEntries(shots.map((x, i) => [x.key, urls[i] ?? ""])));
       } catch {
-        setShots([]);
+        setPics({});
       }
-    }, 50);
+      setBusy(false);
+    }, 250);
     return () => clearTimeout(t);
-  }, [o]);
+  }, [o, looks, background, look, part.l, part.w, part.h]);
+
   const lines = reportLines(o, study);
   const grade = BOARD_GRADES.find((g) => g.key === o.container.grade);
-  const facts = {
+  const facts: Record<ReportSection, string[][]> = {
     part: [
+      ["Part", item ? `${item.partNumber} rev ${item.revision}` : "Entered by size"],
       ["Size", `${part.l} × ${part.w} × ${part.h} mm`],
       ["Weight", `${part.weight} kg`],
       ["Packing cost per part", cost4(o.perPart.container + o.perPart.dunnage + o.perPart.pallet)],
@@ -712,11 +820,12 @@ function ReportModal({ o, item, part, study, onClose }: { o: PackOption; item: I
       ["Total per part", cost4(o.perPart.total)],
     ],
     box: [
+      ["Container", o.container.name],
       ["Outside", `${num(o.outer.l, 0)} × ${num(o.outer.w, 0)} × ${num(o.outer.h, 0)} mm`],
       ["Inside", `${num(o.container.l, 0)} × ${num(o.container.w, 0)} × ${num(o.container.h, 0)} mm`],
       ...(grade ? [["Board", grade.label], ["Crush strength", `${num(cartonStrengthN(o.outer, grade) / 9.81, 0)} kg`]] : []),
       ["Price", money(o.container.cost)],
-      ["Parts per container", String(o.box.count)],
+      ["Parts per container", `${o.box.count} (${o.box.perLayer} × ${o.box.layers}${o.box.perStack > 1 ? ` × ${o.box.perStack}` : ""})`],
       ["Pads / dividers", o.box.pads ? `${o.box.pads} pads` : o.box.dividerM2 ? `${num(o.box.dividerM2, 2)} m² dividers` : "None"],
       ["Weight full", `${num(o.boxGross, 1)} kg`],
       ["Load on the bottom one", `${num(bottomLoadKg(o), 1)} kg`],
@@ -737,27 +846,133 @@ function ReportModal({ o, item, part, study, onClose }: { o: PackOption; item: I
       ["Cargo weight", `${num(o.palletLoad.gross * o.load.pallets, 0)} kg`],
     ],
   };
+  const sub = `${item ? `${item.partNumber} rev ${item.revision} · ${item.description}` : "Part entered by size"} · ${new Date().toLocaleDateString()}`;
+  const sections: { key: ReportSection; heading: string; main: string; small: [string, string][] }[] = [
+    { key: "part", heading: "Part", main: "part", small: [] },
+    { key: "box", heading: `Container · ${o.container.name}`, main: "boxIso", small: [["boxFront", "Front"], ["boxSide", "Side"], ["boxTop", "Top"]] },
+    { key: "pallet", heading: "Pallet", main: "palletIso", small: [["palletSide", "Side"], ["palletTop", "Top"]] },
+    { key: "truck", heading: "Truck", main: "truckIso", small: [] },
+  ];
+  const shown = sections.filter((x) => include[x.key]);
+
   const print = () => {
     const w = window.open("", "_blank", "width=960,height=1100");
-    if (!w || !shots) return;
+    if (!w) return;
     const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
     const table = (rows: string[][]) => `<table>${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}</table>`;
-    const img = (i: number, cap = "") => (shots[i] ? `<figure><img src="${shots[i]}" alt="">${cap ? `<figcaption>${esc(cap)}</figcaption>` : ""}</figure>` : "");
+    const img = (k: string, cap = "") => (pics[k] ? `<figure><img src="${pics[k]}" alt="">${cap ? `<figcaption>${esc(cap)}</figcaption>` : ""}</figure>` : "");
+    const costs = include.costs
+      ? `<div class="sec"><h2>Cost of a full truckload</h2><table><tr><th>Line</th><th class="r">Qty</th><th class="r">Each</th><th class="r">Cost</th></tr>${lines.rows.map((r) => `<tr><td>${esc(r.label)}</td><td class="r">${esc(r.qty)}</td><td class="r">${esc(r.each)}</td><td class="r">${esc(money(r.total))}</td></tr>`).join("")}<tr class="tot"><td>Cost per truckload</td><td></td><td></td><td class="r">${esc(money(lines.total))}</td></tr></table></div>`
+      : "";
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
-<style>@page{size:A4;margin:12mm}body{font:11.5px system-ui,sans-serif;color:#111;margin:0}h1{font-size:19px;margin:0}h2{font-size:13px;margin:12px 0 4px;padding-top:8px;border-top:1px solid #ccc}.m{color:#555}.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}table{width:100%;border-collapse:collapse}th,td{padding:3px 5px;border-bottom:1px solid #e3e3e3;text-align:left}th{color:#555;font-weight:500}td.r,th.r{text-align:right}figure{margin:0}img{width:100%;border:1px solid #e3e3e3;border-radius:4px}figcaption{text-align:center;color:#666;font-size:10px}.tot td{font-weight:700}.notes{white-space:pre-wrap;border:1px solid #ddd;border-radius:4px;padding:6px;min-height:30px}.sec{break-inside:avoid}</style></head><body>
-<h1>${esc(title)}</h1><div class="m">${esc(item ? `${item.partNumber} rev ${item.revision} · ${item.description}` : "Part entered by size")} · ${new Date().toLocaleDateString()}</div>
-<div class="sec"><h2>Part</h2><div class="g2">${table(facts.part)}${img(0)}</div></div>
-<div class="sec"><h2>Container · ${esc(o.container.name)}</h2><div class="g2">${table(facts.box)}<div></div></div><div class="g3">${img(1, "Front")}${img(2, "Side")}${img(3, "Top")}</div></div>
-<div class="sec"><h2>Pallet</h2><div class="g2">${table(facts.pallet)}${img(4)}</div><div class="g3">${img(5, "Side")}${img(6, "Top")}<div></div></div></div>
-<div class="sec"><h2>Truck</h2><div class="g2">${table(facts.truck)}${img(7)}</div>
-<table style="margin-top:8px"><tr><th>Line</th><th class="r">Qty</th><th class="r">Each</th><th class="r">Cost</th></tr>${lines.rows.map((r) => `<tr><td>${esc(r.label)}</td><td class="r">${esc(r.qty)}</td><td class="r">${esc(r.each)}</td><td class="r">${esc(money(r.total))}</td></tr>`).join("")}<tr class="tot"><td>Cost per truckload</td><td></td><td></td><td class="r">${esc(money(lines.total))}</td></tr></table></div>
-<h2>Packing instruction</h2><p>${esc(instruction(o, study.method))}</p>
-${notes.trim() ? `<h2>Notes</h2><div class="notes">${esc(notes)}</div>` : ""}
+<style>@page{size:A4;margin:12mm}body{font:11.5px system-ui,sans-serif;color:#111;margin:0}h1{font-size:19px;margin:0}h2{font-size:13px;margin:12px 0 4px;padding-top:8px;border-top:1px solid #ccc}.m{color:#555}.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px}table{width:100%;border-collapse:collapse}th,td{padding:3px 5px;border-bottom:1px solid #e3e3e3;text-align:left}th{color:#555;font-weight:500}td.r,th.r{text-align:right}figure{margin:0}img{width:100%;border:1px solid #e3e3e3;border-radius:4px}figcaption{text-align:center;color:#666;font-size:10px}.tot td{font-weight:700}.notes{white-space:pre-wrap;border:1px solid #ddd;border-radius:4px;padding:6px}.sec{break-inside:avoid}</style></head><body>
+<h1>${esc(title)}</h1><div class="m">${esc(sub)}</div>
+${shown.map((x) => `<div class="sec"><h2>${esc(x.heading)}</h2><div class="g2">${table(facts[x.key])}${img(x.main)}</div>${x.small.length ? `<div class="g3">${x.small.map(([k, c]) => img(k, c)).join("")}</div>` : ""}</div>`).join("")}
+${costs}
+<div class="sec"><h2>Packing instruction</h2><p>${esc(instruction(o, study.method))}</p></div>
+${notes.trim() ? `<div class="sec"><h2>Notes</h2><div class="notes">${esc(notes)}</div></div>` : ""}
 <p class="m">Counts use the part's bounding box with ${study.margin} mm clearance. Check the first pack on the floor.</p></body></html>`);
     w.document.close();
     w.focus();
     setTimeout(() => w.print(), 400);
   };
+
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ unit: "mm", format: "a4" });
+      const W = 210, M = 12, colW = (W - M * 3) / 2;
+      let y = M;
+      const room = (h: number) => {
+        if (y + h > 297 - M) {
+          doc.addPage();
+          y = M;
+        }
+      };
+      doc.setFont("helvetica", "bold").setFontSize(16).text(title, M, y + 5);
+      y += 9;
+      doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(90).text(sub, M, y);
+      doc.setTextColor(0);
+      y += 5;
+      const heading = (t: string) => {
+        room(14);
+        doc.setDrawColor(200).line(M, y, W - M, y);
+        y += 5;
+        doc.setFont("helvetica", "bold").setFontSize(11).text(t, M, y);
+        doc.setFont("helvetica", "normal").setFontSize(9);
+        y += 4;
+      };
+      const tableAt = (rows: string[][], x: number, y0: number, w: number) => {
+        let yy = y0;
+        for (const [k = "", v = ""] of rows) {
+          doc.setTextColor(90).text(k, x, yy + 3.5);
+          const fit = doc.splitTextToSize(v, w * 0.68) as string[];
+          doc.setTextColor(0).text(fit.length > 1 ? `${fit[0]!.replace(/\s+\S*$/, "")}…` : (fit[0] ?? ""), x + w, yy + 3.5, { align: "right" });
+          doc.setDrawColor(230).line(x, yy + 5, x + w, yy + 5);
+          yy += 5.5;
+        }
+        return yy;
+      };
+      const image = (k: string, x: number, y0: number, w: number) => {
+        if (!pics[k]) return y0;
+        const h = w * (440 / 640);
+        doc.addImage(pics[k]!, "JPEG", x, y0, w, h);
+        doc.setDrawColor(225).rect(x, y0, w, h);
+        return y0 + h;
+      };
+      for (const x of shown) {
+        const imgH = colW * (440 / 640);
+        // Keep a heading with its table and picture.
+        room(Math.max(facts[x.key].length * 5.5, imgH) + 16);
+        heading(x.heading);
+        const end = Math.max(tableAt(facts[x.key], M, y, colW), image(x.main, M * 2 + colW, y, colW));
+        y = end + 3;
+        if (x.small.length) {
+          const sw = (W - M * 2 - 8) / 3;
+          room(sw * (440 / 640) + 6);
+          x.small.forEach(([k, cap], i) => {
+            const xx = M + i * (sw + 4);
+            image(k, xx, y, sw);
+            doc.setTextColor(110).setFontSize(8).text(cap, xx + sw / 2, y + sw * (440 / 640) + 3.5, { align: "center" });
+            doc.setTextColor(0).setFontSize(9);
+          });
+          y += sw * (440 / 640) + 6;
+        }
+      }
+      if (include.costs) {
+        heading("Cost of a full truckload");
+        room(lines.rows.length * 5.5 + 8);
+        const cols = [M, W - M - 80, W - M - 40, W - M];
+        doc.setTextColor(90).text("Line", cols[0]!, y + 3.5).text("Qty", cols[1]!, y + 3.5, { align: "right" }).text("Each", cols[2]!, y + 3.5, { align: "right" }).text("Cost", cols[3]!, y + 3.5, { align: "right" });
+        doc.setTextColor(0);
+        y += 5.5;
+        for (const r of [...lines.rows, { label: "Cost per truckload", qty: "", each: "", total: lines.total }]) {
+          if (r.label === "Cost per truckload") doc.setFont("helvetica", "bold");
+          doc.text(r.label, cols[0]!, y + 3.5).text(r.qty, cols[1]!, y + 3.5, { align: "right" }).text(r.each, cols[2]!, y + 3.5, { align: "right" }).text(money(r.total), cols[3]!, y + 3.5, { align: "right" });
+          doc.setDrawColor(230).line(M, y + 5, W - M, y + 5);
+          y += 5.5;
+        }
+        doc.setFont("helvetica", "normal");
+      }
+      heading("Packing instruction");
+      const ins = doc.splitTextToSize(instruction(o, study.method), W - M * 2);
+      room(ins.length * 4.5);
+      doc.text(ins, M, y + 3);
+      y += ins.length * 4.5 + 2;
+      if (notes.trim()) {
+        heading("Notes");
+        const n = doc.splitTextToSize(notes, W - M * 2);
+        room(n.length * 4.5);
+        doc.text(n, M, y + 3);
+        y += n.length * 4.5;
+      }
+      doc.save(`${title.replace(/[^\w.-]+/g, "_") || "packing"}.pdf`);
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   const Facts = ({ rows }: { rows: string[][] }) => (
     <dl className="text-sm">
       {rows.map(([k, v]) => (
@@ -768,27 +983,56 @@ ${notes.trim() ? `<h2>Notes</h2><div class="notes">${esc(notes)}</div>` : ""}
       ))}
     </dl>
   );
-  const Pic = ({ i, cap }: { i: number; cap?: string }) => (
-    <figure className="overflow-hidden rounded-lg bg-white ring-1 ring-line">
-      {shots?.[i] ? <img src={shots[i]} alt={cap ?? ""} className="w-full" /> : <div className="aspect-[16/11] animate-pulse bg-panel-2" />}
+  /** A picture with its small tools: colour, edges, full size. */
+  const Pic = ({ k, cap, s }: { k: string; cap?: string; s: ReportSection }) => (
+    <figure className="group relative overflow-hidden rounded-lg ring-1 ring-line" style={{ background }}>
+      {pics[k] && !busy ? <img src={pics[k]} alt={cap ?? ""} className="w-full" /> : <div className="aspect-[16/11] animate-pulse bg-panel-2" />}
       {cap && <figcaption className="py-1 text-center text-xs text-muted">{cap}</figcaption>}
+      <div className="absolute right-1.5 top-1.5 flex flex-col gap-1">
+        <label className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-panel/95 shadow-panel ring-1 ring-line" title="Colour">
+          <span className="h-4 w-4 rounded-full ring-1 ring-black/10" style={{ background: looks[s].color }} />
+          <input type="color" className="sr-only" value={looks[s].color} onChange={(e) => setLooks({ ...looks, [s]: { ...looks[s], color: e.target.value } })} aria-label={`${s} colour`} />
+        </label>
+        <button type="button" title={looks[s].edges ? "Hide edges" : "Show edges"} aria-pressed={looks[s].edges} onClick={() => setLooks({ ...looks, [s]: { ...looks[s], edges: !looks[s].edges } })} className={cx("flex h-7 w-7 items-center justify-center rounded-full shadow-panel ring-1 ring-line", looks[s].edges ? "bg-accent text-accent-ink" : "bg-panel/95 text-muted")}>
+          <Grid3x3 className="h-3.5 w-3.5" />
+        </button>
+        <button type="button" title="Full size" onClick={() => setFull(k)} className="flex h-7 w-7 items-center justify-center rounded-full bg-panel/95 text-muted shadow-panel ring-1 ring-line hover:text-ink">
+          <Maximize2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </figure>
   );
   return (
     <Modal open wide title="Packing report" onClose={onClose}>
-      <div className="max-h-[72vh] space-y-4 overflow-y-auto pr-1">
-        <div className="grid gap-3 sm:grid-cols-2">
+      <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
           <Field label="Title"><Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} /></Field>
           <Field label="Notes (printed at the end)"><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={2000} /></Field>
+          <Field label="Picture background">
+            <input type="color" value={background} onChange={(e) => setBackground(e.target.value)} className="h-10 w-16 cursor-pointer rounded border-0 bg-transparent" />
+          </Field>
         </div>
-        <section className="grid gap-4 md:grid-cols-2"><div><h3 className="mb-1 font-semibold">Part</h3><Facts rows={facts.part} /></div><Pic i={0} /></section>
-        <section><h3 className="mb-1 font-semibold">Container · {o.container.name}</h3><div className="grid gap-4 md:grid-cols-2"><Facts rows={facts.box} /><div /></div><div className="mt-2 grid grid-cols-3 gap-2"><Pic i={1} cap="Front" /><Pic i={2} cap="Side" /><Pic i={3} cap="Top" /></div></section>
-        <section className="grid gap-4 md:grid-cols-2"><div><h3 className="mb-1 font-semibold">Pallet</h3><Facts rows={facts.pallet} /><div className="mt-2 grid grid-cols-2 gap-2"><Pic i={5} cap="Side" /><Pic i={6} cap="Top" /></div></div><Pic i={4} /></section>
-        <section className="grid gap-4 md:grid-cols-2">
-          <div>
-            <h3 className="mb-1 font-semibold">Truck</h3>
-            <Facts rows={facts.truck} />
-            <table className="mt-3 w-full text-sm">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-lg bg-panel-2 px-3 py-2 text-sm">
+          <span className="text-muted">Include:</span>
+          {([["part", "Part"], ["box", "Container"], ["pallet", "Pallet"], ["truck", "Truck"], ["costs", "Truckload costs"]] as const).map(([k, l]) => (
+            <label key={k} className="flex items-center gap-1.5"><input type="checkbox" checked={include[k]} onChange={(e) => setInclude({ ...include, [k]: e.target.checked })} /> {l}</label>
+          ))}
+          {!look.partGeometry && <span className="text-xs text-muted">Add a 3D model to the part to show its real shape.</span>}
+        </div>
+        {shown.map((x) => (
+          <section key={x.key} className="space-y-2">
+            <h3 className="font-semibold">{x.heading}</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Facts rows={facts[x.key]} />
+              <Pic k={x.main} s={x.key} />
+            </div>
+            {x.small.length > 0 && <div className="grid grid-cols-3 gap-2">{x.small.map(([k, c]) => <Pic key={k} k={k} cap={c} s={x.key} />)}</div>}
+          </section>
+        ))}
+        {include.costs && (
+          <section>
+            <h3 className="mb-1 font-semibold">Cost of a full truckload</h3>
+            <table className="w-full text-sm">
               <thead><tr className="text-xs text-muted"><th className="py-1 text-left font-medium">Line</th><th className="text-right font-medium">Qty</th><th className="text-right font-medium">Each</th><th className="text-right font-medium">Cost</th></tr></thead>
               <tbody>
                 {lines.rows.map((r) => (
@@ -797,14 +1041,19 @@ ${notes.trim() ? `<h2>Notes</h2><div class="notes">${esc(notes)}</div>` : ""}
                 <tr className="border-t border-line font-semibold"><td className="py-1">Cost per truckload</td><td /><td /><td className="num text-right">{money(lines.total)}</td></tr>
               </tbody>
             </table>
-          </div>
-          <Pic i={7} />
-        </section>
+          </section>
+        )}
       </div>
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
         <Button onClick={onClose}>Close</Button>
-        <Button variant="primary" onClick={print} disabled={!shots}><Printer className="h-4 w-4" /> {shots ? "Print or save as PDF" : "Drawing pictures…"}</Button>
+        <Button onClick={print} disabled={busy}><Printer className="h-4 w-4" /> Print</Button>
+        <Button variant="primary" onClick={downloadPdf} disabled={busy || pdfBusy}><FileDown className="h-4 w-4" /> {busy ? "Drawing pictures…" : pdfBusy ? "Making PDF…" : "Download PDF"}</Button>
       </div>
+      {full && pics[full] && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6" onClick={() => setFull(null)} role="dialog" aria-label="Picture full size">
+          <img src={pics[full]} alt="" className="max-h-full max-w-full rounded-lg shadow-2xl" />
+        </div>
+      )}
     </Modal>
   );
 }

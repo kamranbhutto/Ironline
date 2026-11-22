@@ -535,7 +535,13 @@ maths (`packages/shared/src/packing.ts`) and wording. Supply → Packaging.
   hide dividers and pads, spread layers. Right: the ranked options (top three marked), the
   pallets (click one to see only its options) and the truck. Top bar: rank by lowest cost or
   most parts per truck, and weight limits on or off.
-- **Report preview:** title and notes, the part, the container with front, side and top views,
+- **Real part shape:** when the part has a 3D model, every copy inside the container is drawn
+  from it, turned the way the packing maths placed it (switch to blocks with "Real part").
+- **Colours** for the part, dividers and container; **download 3D**: the part's own model file,
+  or the current box, pallet or truck as STL or GLB.
+- **Report preview:** a picture of the real part, small buttons on every picture for colour,
+  edges and full size, a background colour, sections that can be left out, Print or
+  **Download PDF** (a PDF file made in the browser). Report preview so far: title and notes, the part, the container with front, side and top views,
   the pallet with side and top views, the truck with a cost-per-truckload table; then print or
   save as PDF.
 

@@ -169,6 +169,47 @@ export async function measureModel(url: string, name: string, prepared: boolean)
   return { dims, volume };
 }
 
+/**
+ * Load a part model as one geometry for packing pictures. It is turned so its longest side runs
+ * along x, the next along z and the shortest up (y) — the same order as the measured length,
+ * width and height — then centred and stretched to a 1 × 1 × 1 cube, so each copy can be scaled
+ * to the space the packing maths gives it.
+ */
+export async function loadPartGeometry(url: string, name: string, prepared: boolean) {
+  const res = await fetch(url, { credentials: "same-origin" });
+  if (!res.ok) throw new Error(`Could not open ${name} (${res.status})`);
+  const obj = prepared ? await buildPrepared(await res.arrayBuffer()) : await buildObject(name, await res.arrayBuffer());
+  obj.updateMatrixWorld(true);
+  const parts: THREE.BufferGeometry[] = [];
+  obj.traverse((c) => {
+    if (!(c instanceof THREE.Mesh)) return;
+    let g = (c.geometry as THREE.BufferGeometry).clone();
+    if (g.index) g = g.toNonIndexed();
+    for (const k of Object.keys(g.attributes)) if (k !== "position") g.deleteAttribute(k);
+    g.applyMatrix4(c.matrixWorld);
+    parts.push(g);
+  });
+  if (!parts.length) throw new Error("The model has no surfaces to draw");
+  const { mergeGeometries } = await import("three/examples/jsm/utils/BufferGeometryUtils.js");
+  const geo = mergeGeometries(parts, false)!;
+  parts.forEach((g) => g.dispose());
+  geo.computeBoundingBox();
+  const size = geo.boundingBox!.getSize(new THREE.Vector3());
+  const centre = geo.boundingBox!.getCenter(new THREE.Vector3());
+  geo.translate(-centre.x, -centre.y, -centre.z);
+  // Axis order by length: longest → x, middle → z, shortest → y (up).
+  const axes = [0, 1, 2].sort((a, b) => size.getComponent(b) - size.getComponent(a));
+  const unit = (i: number) => new THREE.Vector3(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0);
+  // Rows of the turn: new x = old longest, new y = old shortest, new z = old middle.
+  const m = new THREE.Matrix4().makeBasis(unit(axes[0]!), unit(axes[2]!), unit(axes[1]!)).transpose();
+  if (m.determinant() < 0) m.multiply(new THREE.Matrix4().makeScale(1, 1, -1));
+  geo.applyMatrix4(m);
+  const dims: [number, number, number] = [size.getComponent(axes[0]!), size.getComponent(axes[1]!), size.getComponent(axes[2]!)];
+  geo.scale(1 / Math.max(dims[0], 1e-6), 1 / Math.max(dims[2], 1e-6), 1 / Math.max(dims[1], 1e-6));
+  geo.computeVertexNormals();
+  return { geometry: geo, dims, triangles: geo.getAttribute("position").count / 3 };
+}
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 type Nav = "orbit" | "pan" | "zoom";

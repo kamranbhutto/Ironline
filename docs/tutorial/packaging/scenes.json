@@ -1,11 +1,11 @@
 [
  {
   "id": "01_title",
-  "text": "Hello, and welcome. In this video you will see the new Packaging module in Ironline. It finds the cheapest way to pack and ship each part: which box, tote or crate, how many parts go in it, how many boxes fit on a pallet, how many pallets fit in the truck, and what all of that costs per part."
+  "text": "Hello, and welcome. In this video you will see the Packing studio in Ironline. It finds the cheapest way to pack and ship each part: which box, tote or crate, how many parts go in it, how many boxes fit on a pallet, how many pallets fit in the truck, and what all of that costs per part."
  },
  {
   "id": "02_open",
-  "text": "Open Supply, then Packaging. Everything happens on one screen: settings on the left, a large 3D workspace in the middle, and the packing options on the right. Choose the part, here the drive hub, D M W ten forty."
+  "text": "Open Supply, then Packaging. The studio opens full screen, so you get a big workspace: settings on the left, the 3D view in the middle, and the packaging options on the right. At the top, choose the part. Here we pick the drive hub, D M W ten forty."
  },
  {
   "id": "03_measure",
@@ -13,42 +13,46 @@
  },
  {
   "id": "04_options",
-  "text": "Straight away, every container, pallet and truck you selected is counted and costed. The options on the right are ranked with the cheapest cost per part at the top. Each card shows the parts per container, per pallet and per truck, and a note when the lifting weight or the pallet limits the count."
+  "text": "Straight away, every container, pallet and truck you selected is counted and costed. The options on the right are ranked with the cheapest cost per part first, and the top three get a medal. Each one shows the outside size, the cost per part, the parts per container, the parts per truck, and the pallet."
  },
  {
   "id": "05_method",
-  "text": "The icons on the left switch between the settings. Packing chooses how parts go in: flat layers turns each part whichever way fits the most, one per cell gives every part its own cell with dividers, and nested stacks is for parts that slide into each other. You can also set the clearance around each part, pads between layers, and the most a person should lift."
+  "text": "In the Packing section you choose how the parts go in. Flat layers turns each part whichever way fits the most. One per cell gives every part its own cell with cardboard dividers, and you see the dividers appear in 3D. Nested stacks is for parts that slide into each other. You can also set the clearance around each part, and pads between layers."
  },
  {
   "id": "06_3d",
-  "text": "Click any option to see it in the 3D workspace. This is the inside of the container. Slide Spread layers to pull the layers apart. Then switch to the pallet, and to the truck, to see the whole load. Drag to turn the view."
+  "text": "The 3D view shows the inside of the container. Hide or show the dividers, and slide Spread to pull the layers apart. Switch to Pallet, and to Truck, to see the whole load. Drag to turn the view; the small X, Y and Z marker shows which way you are looking."
  },
  {
-  "id": "07_cost",
-  "text": "Under the options is the cost per part, split into the container, pads and dividers, the pallet and wrap, and the freight, with the packing instruction. The Shipping tab prices freight per pallet or per truck, and you can enter a real shipment, for example five hundred parts, to see what that order costs to ship."
+  "id": "07_results",
+  "text": "Click Results to see every number for the selected option: the inside and outside size, the cardboard grade and its crush strength, the full weight, the load on the bottom box, then the pallet, the truck, how much of the truck is used, and the cost per part, line by line."
  },
  {
   "id": "08_fit",
-  "text": "Now the clever part. Click Find best carton size. Ironline designs cartons built exactly around whole numbers of parts, chooses the cheapest cardboard grade that is still strong enough for the pallet stack, and adds the best five to the list. Here a made to size carton is much cheaper per part than any stock box."
+  "text": "Now the clever part. Click Find best carton size. Ironline designs cartons built exactly around whole numbers of parts, chooses the cheapest cardboard grade that is still strong enough for the pallet stack, and adds the best five to the list, marked Made to size. Here it beats every stock box."
  },
  {
-  "id": "09_roi",
-  "text": "The Payback tab compares returnable totes with throw away cartons. Enter the parts per year and how many days a tote is away, and you see the fleet you need, what it costs, the yearly saving, and the payback time. Here the made to size carton is so cheap that the totes would never pay back, so the carton wins."
+  "id": "09_rank",
+  "text": "At the top you can rank the options by lowest cost, or by the most parts per truck. And you can switch the weight limits off, to see what fits by space alone. Then switch them back on."
  },
  {
-  "id": "10_save",
-  "text": "When you are happy, click Use for part. The packing is saved on the part. The Report button prints a one page packing report with the 3D picture, the counts and the costs, ready to send to a customer."
+  "id": "10_roi",
+  "text": "Under Returnables, Ironline compares returnable totes with throw away packaging. Enter the parts per year and how many days a tote is away, and you see the fleet you need, what it costs, the yearly saving, and how many months the totes take to pay for themselves."
  },
  {
-  "id": "11_part_job",
-  "text": "The part page now has a Packing tab with the saved packing. And every job for this part shows the packing instruction, and how many containers that job needs, so the shop floor knows exactly how to pack it."
+  "id": "11_report",
+  "text": "Click Report for a packing report. Give it a title and add notes. It shows the part, the container from the front, side and top, the pallet, and the truck with the cost of a full truckload, line by line. Then print it, or save it as a PDF to send to your customer."
  },
  {
-  "id": "12_library",
-  "text": "Finally, the Library tab holds your own cartons, totes, crates, pallets and trucks, with their sizes, weights, prices and limits. Click Add to put in your own, or click any line to change it."
+  "id": "12_save",
+  "text": "When you are happy, click Use for part. The packing is saved on the part, in its Packing tab, and every job for this part shows the packing instruction and how many containers that job needs."
  },
  {
-  "id": "13_outro",
-  "text": "That is Packaging in Ironline: pick the part, compare the options, find the best carton, and save it for the shop floor. Thank you for watching."
+  "id": "13_library",
+  "text": "Your own cartons, totes, crates, pallets and trucks live in the packaging library, with their sizes, weights, prices and limits. Click Add to put in your own, or click a line to change it."
+ },
+ {
+  "id": "14_outro",
+  "text": "That is the Packing studio in Ironline: pick the part, compare the options, find the best carton, print the report, and save it for the shop floor. Thank you for watching."
  }
 ]

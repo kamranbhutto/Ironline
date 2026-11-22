@@ -3,3 +3,9 @@ dist
 .env
 *.log
 uploads
+
+# Generated tutorial files (voice clips, recordings, preview frames)
+docs/tutorial/*/audio/
+docs/tutorial/*/video/
+docs/tutorial/*/frames/
+docs/tutorial/*/marks.json
