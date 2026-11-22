@@ -70,7 +70,7 @@ const GROUPS: NavGroup[] = [
       { to: "/items", label: "Parts & materials", icon: Package },
       { to: "/inventory", label: "Inventory", icon: Boxes },
       { to: "/purchasing", label: "Purchasing", icon: Receipt },
-      { to: "/packaging", label: "Packaging", icon: PackageCheck },
+      { to: "/packaging/studio", label: "Packaging", icon: PackageCheck },
       { to: "/soon/shipping", label: "Shipping", icon: Truck, soon: true },
     ],
   },
@@ -435,7 +435,7 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
   const initials = me.user.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
   // The operator screen is a tablet kiosk: no office chrome, the job gets the whole screen.
-  if (loc.pathname.startsWith("/floor/op/")) return <div className="h-full overflow-y-auto">{children}</div>;
+  if (loc.pathname.startsWith("/floor/op/") || loc.pathname.startsWith("/packaging/studio")) return <div className="h-full overflow-y-auto">{children}</div>;
   return (
     <div className="flex h-full">
       <aside className={cx("hidden shrink-0 transition-[width] duration-200 lg:block", collapsed ? "w-16" : "w-60")}>

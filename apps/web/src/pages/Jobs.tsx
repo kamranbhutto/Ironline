@@ -258,7 +258,7 @@ export function JobDetailPage() {
             )}
           </div>
           {j.part?.packSpec && (
-            <Link to={`/packaging?item=${j.itemId}`} className="mt-3 block rounded-lg bg-panel-2 px-3 py-2 text-sm hover:ring-1 hover:ring-accent" title="Open the packing study">
+            <Link to={`/packaging/studio?item=${j.itemId}`} className="mt-3 block rounded-lg bg-panel-2 px-3 py-2 text-sm hover:ring-1 hover:ring-accent" title="Open the packing study">
               <div className="text-[11px] text-muted">Packing</div>
               <div>
                 <b>{num(j.part.packSpec.perBox, 0)} per {j.part.packSpec.container.code}</b>, {num(j.part.packSpec.boxesPerPallet, 0)} per pallet

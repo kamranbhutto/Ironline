@@ -118,6 +118,22 @@ describe("evaluate", () => {
   });
 });
 
+describe("ranking and weight", () => {
+  it("ignores weight limits when asked", () => {
+    const f = fillContainer(part, { l: 300, w: 200, h: 200 }, 1, 0, { ...s, boxWeightCap: 18, ignoreWeight: true })!;
+    expect(f.count).toBe(60);
+    const p = loadPallet({ l: 400, w: 300, h: 250 }, 40, pallet, 100, 5, true)!;
+    expect(p.boxes).toBe(32); // 8 a layer × 4 layers; weight and strength not applied
+  });
+  it("ranks by most parts per truck", () => {
+    const big = { ...tote, id: "big", l: 600, w: 400, h: 400, cost: 200 };
+    const ranked = rankOptions(part, [tote, big], [pallet], [truck], { ...s, objective: "loadout", ignoreWeight: true });
+    expect(ranked[0]!.partsPerLoad).toBeGreaterThanOrEqual(ranked[1]!.partsPerLoad);
+    const byCost = rankOptions(part, [tote, big], [pallet], [truck], { ...s, ignoreWeight: true });
+    expect(byCost[0]!.rankCost).toBeLessThanOrEqual(byCost[1]!.rankCost);
+  });
+});
+
 describe("bestCartons", () => {
   it("sizes cartons around whole parts and ranks them", () => {
     const r = bestCartons({ l: 100, w: 100, h: 100, weight: 0.1 }, pallet, truck, { ...s, freightMode: "load" }, { min: 100, max: 600 });

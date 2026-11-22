@@ -18,7 +18,7 @@ import { SalesOrderPage, SalesOrdersPage } from "./pages/SalesOrders.tsx";
 import { ComingSoonPage, NotFoundPage } from "./pages/Soon.tsx";
 import { InventoryPage, ItemStockPage, StockTakePage } from "./pages/Inventory.tsx";
 import { PurchaseOrderPage, PurchasingPage, VendorPage } from "./pages/Purchasing.tsx";
-import { PackagingPage } from "./pages/Packaging.tsx";
+import { PackagingPage, PackingStudio } from "./pages/Packaging.tsx";
 import { QualityPage } from "./pages/Quality.tsx";
 import { ReportEditorPage, ReportsPage } from "./pages/Reports.tsx";
 import { WorkCentersPage } from "./pages/WorkCenters.tsx";
@@ -64,6 +64,7 @@ function App() {
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/purchasing" element={<PurchasingPage />} />
         <Route path="/packaging" element={<PackagingPage />} />
+        <Route path="/packaging/studio" element={<PackingStudio />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/reports/:id" element={<ReportEditorPage />} />
         <Route path="/purchasing/orders/:id" element={<PurchaseOrderPage />} />

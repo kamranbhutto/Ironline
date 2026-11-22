@@ -6,7 +6,7 @@ import { money, num } from "../format.ts";
 /** The part page's Packing tab: its saved packing spec, or a way to make one. */
 export function PartPacking({ itemId, spec, size }: { itemId: string; spec: PackSpec | null; size: [number, number, number, number] | null }) {
   const open = (
-    <Link to={`/packaging?item=${itemId}`} className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-accent-ink hover:brightness-110">
+    <Link to={`/packaging/studio?item=${itemId}`} className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-accent-ink hover:brightness-110">
       <PackageCheck className="h-4 w-4" /> {spec ? "Open the packing study" : "Work out how to pack it"}
     </Link>
   );

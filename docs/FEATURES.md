@@ -527,6 +527,18 @@ menu above them.
 Built from public descriptions of what industrial packing-optimisation tools do, with our own
 maths (`packages/shared/src/packing.ts`) and wording. Supply → Packaging.
 
+- **Packing studio (full screen, Supply → Packaging):** no app menu, so the 3D workspace gets
+  the whole middle of the screen. Left: Configure (folding sections: Part, Packing, Limits,
+  Shipping, Returnables, Containers/pallets/trucks) or Results (every number for the chosen
+  option: container, board, crush strength, weights, load on the bottom box, pallet, truck,
+  space used, cost per part). Centre: 3D with an X/Y/Z marker, Box / Pallet / Truck, show or
+  hide dividers and pads, spread layers. Right: the ranked options (top three marked), the
+  pallets (click one to see only its options) and the truck. Top bar: rank by lowest cost or
+  most parts per truck, and weight limits on or off.
+- **Report preview:** title and notes, the part, the container with front, side and top views,
+  the pallet with side and top views, the truck with a cost-per-truckload table; then print or
+  save as PDF.
+
 - **Packing study:** pick a part (or type a size), enter its length, width, height and weight,
   or **measure them from the part's 3D model**. Tick the containers, pallets and trucks to
   compare; every combination is counted and costed instantly and ranked by cost per part.

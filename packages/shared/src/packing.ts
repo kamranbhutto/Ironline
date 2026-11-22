@@ -105,6 +105,10 @@ export interface PackSettings {
   freightPerPallet: number;
   /** cost a real shipment of this many parts; 0 = cost a full truck */
   shipQty: number;
+  /** skip every weight limit (lift, container, pallet, truck, stacking strength) to see the space-only answer */
+  ignoreWeight?: boolean;
+  /** rank by lowest cost per part, or by most parts per truck */
+  objective?: "cost" | "loadout";
 }
 
 export const DEFAULT_PACK_SETTINGS: PackSettings = {
@@ -244,7 +248,7 @@ export function fillContainer(part: PackPart, inner: Dims, tare: number, maxLoad
   const m = s.margin * 2;
   const choices: { vertical: BoxFill["vertical"]; p: number; q: number; r: number }[] = [{ vertical: "h", p: part.l, q: part.w, r: part.h }];
   if (!part.upright && s.method !== "nest") choices.push({ vertical: "w", p: part.l, q: part.h, r: part.w }, { vertical: "l", p: part.w, q: part.h, r: part.l });
-  const capKg = Math.min(maxLoad > 0 ? maxLoad : Infinity, handLifted && s.boxWeightCap > 0 ? s.boxWeightCap - tare : Infinity);
+  const capKg = s.ignoreWeight ? Infinity : Math.min(maxLoad > 0 ? maxLoad : Infinity, handLifted && s.boxWeightCap > 0 ? s.boxWeightCap - tare : Infinity);
   const weightCap = part.weight > 0 ? Math.max(0, Math.floor(capKg / part.weight + EPS)) : Infinity;
   let best: BoxFill | null = null;
   for (const c of choices) {
@@ -311,20 +315,20 @@ export interface PalletLoad {
   limitedBy: "height" | "weight" | "strength" | "space";
 }
 
-export function loadPallet(outer: Dims, boxGross: number, pallet: PackPallet, strengthN: number | null, safety: number): PalletLoad | null {
+export function loadPallet(outer: Dims, boxGross: number, pallet: PackPallet, strengthN: number | null, safety: number, ignoreWeight = false): PalletLoad | null {
   const floor = floorFill(pallet.l, pallet.w, outer.l, outer.w);
   if (!floor.count) return null;
   const byHeight = Math.floor((pallet.maxHeight - pallet.h + EPS) / outer.h);
   if (byHeight < 1) return null;
   let layers = byHeight;
   let limitedBy: PalletLoad["limitedBy"] = "height";
-  if (strengthN != null && boxGross > 0) {
+  if (!ignoreWeight && strengthN != null && boxGross > 0) {
     // The bottom box carries every box above it.
     const byStrength = 1 + Math.floor(strengthN / (safety * boxGross * G) + EPS);
     if (byStrength < layers) (layers = byStrength), (limitedBy = "strength");
   }
   let boxes = floor.count * layers;
-  if (pallet.maxLoad > 0 && boxGross > 0) {
+  if (!ignoreWeight && pallet.maxLoad > 0 && boxGross > 0) {
     const byWeight = Math.floor(pallet.maxLoad / boxGross + EPS);
     if (byWeight < boxes) (boxes = byWeight), (limitedBy = "weight");
   }
@@ -341,13 +345,13 @@ export interface VehicleLoad {
   limitedBy: "floor" | "weight";
 }
 
-export function loadVehicle(foot: { l: number; w: number }, height: number, gross: number, v: PackVehicle, stack: boolean): VehicleLoad | null {
+export function loadVehicle(foot: { l: number; w: number }, height: number, gross: number, v: PackVehicle, stack: boolean, ignoreWeight = false): VehicleLoad | null {
   const floor = floorFill(v.l, v.w, foot.l, foot.w);
   if (!floor.count || height > v.h + EPS) return null;
   const tiers = stack ? Math.max(1, Math.floor((v.h + EPS) / height)) : 1;
   let pallets = floor.count * tiers;
   let limitedBy: VehicleLoad["limitedBy"] = "floor";
-  if (v.payload > 0 && gross > 0) {
+  if (!ignoreWeight && v.payload > 0 && gross > 0) {
     const byWeight = Math.floor(v.payload / gross + EPS);
     if (byWeight < pallets) (pallets = byWeight), (limitedBy = "weight");
   }
@@ -393,9 +397,9 @@ function evaluateFilled(part: PackPart, container: PackContainer, box: BoxFill, 
   const boxGross = container.tare + box.count * part.weight;
   const grade = container.kind === "carton" ? gradeOf(container.grade) : undefined;
   const strength = grade ? cartonStrengthN(outer, grade) : null;
-  const palletLoad = loadPallet(outer, boxGross, pallet, strength, s.safetyFactor);
+  const palletLoad = loadPallet(outer, boxGross, pallet, strength, s.safetyFactor, s.ignoreWeight);
   if (!palletLoad) return null;
-  const load = loadVehicle({ l: pallet.l, w: pallet.w }, palletLoad.height, palletLoad.gross, vehicle, s.stackPallets);
+  const load = loadVehicle({ l: pallet.l, w: pallet.w }, palletLoad.height, palletLoad.gross, vehicle, s.stackPallets, s.ignoreWeight);
   if (!load) return null;
 
   const partsPerPallet = palletLoad.boxes * box.count;
@@ -449,8 +453,12 @@ export function rankOptions(part: PackPart, containers: PackContainer[], pallets
     const o = evaluate(part, c, p, v, s);
     if (o) out.push(o);
   }
-  return out.sort((a, b) => a.rankCost - b.rankCost || b.box.count - a.box.count);
+  return out.sort(compareOptions(s));
 }
+
+/** Ranking: cheapest per part first, or most parts per truck first (cost breaks ties). */
+export const compareOptions = (s: Pick<PackSettings, "objective">) => (a: PackOption, b: PackOption) =>
+  s.objective === "loadout" ? b.partsPerLoad - a.partsPerLoad || a.rankCost - b.rankCost : a.rankCost - b.rankCost || b.box.count - a.box.count;
 
 // ── Made-to-size carton search ──────────────────────────────────────────────
 
@@ -554,7 +562,7 @@ export function bestCartons(part: PackPart, pallet: PackPallet, vehicle: PackVeh
       }
     }
   }
-  return results.sort((x, y) => x.rankCost - y.rankCost || y.box.count - x.box.count).slice(0, keep);
+  return results.sort(compareOptions(s)).slice(0, keep);
 }
 
 // ── Returnable versus one-way ───────────────────────────────────────────────
@@ -583,3 +591,10 @@ export function returnableRoi(i: RoiInput) {
   const breakEvenMonths = annualSaving > 0 ? round(capital / (annualSaving / 12), 1) : null;
   return { fleet, capital, annualSaving, breakEvenMonths };
 }
+
+/** Weight resting on the bottom container of a pallet stack, kg. */
+export const bottomLoadKg = (o: PackOption) => Math.max(0, o.palletLoad.layers - 1) * o.boxGross;
+
+/** Share of the truck's inside volume the loaded pallets take. */
+export const truckFill = (o: PackOption) =>
+  (o.load.pallets * o.pallet.l * o.pallet.w * o.palletLoad.height) / (o.vehicle.l * o.vehicle.w * o.vehicle.h);
