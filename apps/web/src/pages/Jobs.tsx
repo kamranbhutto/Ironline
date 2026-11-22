@@ -257,6 +257,15 @@ export function JobDetailPage() {
               <div className="text-[17px] font-medium">{j.description}</div>
             )}
           </div>
+          {j.part?.packSpec && (
+            <Link to={`/packaging?item=${j.itemId}`} className="mt-3 block rounded-lg bg-panel-2 px-3 py-2 text-sm hover:ring-1 hover:ring-accent" title="Open the packing study">
+              <div className="text-[11px] text-muted">Packing</div>
+              <div>
+                <b>{num(j.part.packSpec.perBox, 0)} per {j.part.packSpec.container.code}</b>, {num(j.part.packSpec.boxesPerPallet, 0)} per pallet
+                <span className="text-muted"> · {num(Math.ceil(j.quantity / j.part.packSpec.perBox), 0)} {Math.ceil(j.quantity / j.part.packSpec.perBox) === 1 ? "container" : "containers"} for this job</span>
+              </div>
+            </Link>
+          )}
           <div className="mt-4 space-y-3">
             <InsetField label="Status" tone={STATUS_TONE[j.status]}>
               <select

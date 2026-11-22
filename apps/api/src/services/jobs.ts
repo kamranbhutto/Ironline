@@ -198,7 +198,7 @@ export async function getJob(db: Db | Tx, ctx: Ctx, id: string) {
       customerId: customers.id,
       customerName: customers.name,
       unitPrice: salesOrderLines.unitPrice,
-      part: { partNumber: items.partNumber, revision: items.revision, name: items.description, type: items.type, uom: items.uom },
+      part: { partNumber: items.partNumber, revision: items.revision, name: items.description, type: items.type, uom: items.uom, packSpec: items.packSpec },
     })
     .from(jobs)
     .leftJoin(salesOrderLines, eq(salesOrderLines.id, jobs.salesOrderLineId))

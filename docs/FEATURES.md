@@ -521,3 +521,38 @@ menu above them.
   plus materials plus its made pieces, kept up to date when the part or any piece is saved,
   so quotes and jobs for assemblies include every piece. `npm run db:recost -w @ironline/api`
   recalculates all parts (run after upgrading or changing work-center rates).
+
+## Packaging (2026-11-22)
+
+Built from public descriptions of what industrial packing-optimisation tools do, with our own
+maths (`packages/shared/src/packing.ts`) and wording. Supply → Packaging.
+
+- **Packing study:** pick a part (or type a size), enter its length, width, height and weight,
+  or **measure them from the part's 3D model**. Tick the containers, pallets and trucks to
+  compare; every combination is counted and costed instantly and ranked by cost per part.
+- **Three ways to pack:** flat layers (each part turned the way that fits most, with optional
+  board pads between layers), one part per cell (with dividers, costed by board area), and
+  nested stacks (parts that slide into each other, by their nest step). "This side up" keeps
+  the part's height vertical.
+- **Limits that are checked:** clearance around parts, the per-person lift limit, container
+  load limit, pallet height and weight, carton stacking strength (from the board grade, with a
+  safety factor), truck floor and payload.
+- **Cost per part:** container (or a returnable's trip cost plus wear), pads and dividers,
+  pallet and wrap, freight (per pallet, or per truck: fixed plus per km). Cost a full truck, or
+  a real shipment quantity.
+- **Find best carton size:** searches carton sizes built exactly around whole numbers of parts
+  inside a size window, picks the cheapest board grade that survives the pallet stack, and
+  adds the best five as "Made to size" options.
+- **3D views** of the parts inside the container (with layers spread apart), the pallet, and
+  the truck.
+- **Returnable or one-way:** fleet size, fleet cost, yearly saving and payback months for the
+  best returnable container against the best one-way one.
+- **Use for this part** saves the packing spec on the part (Packing tab on the part page) and
+  shows it on every job for that part, with how many containers the job needs.
+- **Report:** a one-page printable packing report with the 3D picture, counts and costs.
+- **Library:** cartons (with board grade), totes and crates (returnable or one-way), pallets
+  (with height and weight limits) and trucks/containers. Each shop starts with a common set.
+
+Not built (on purpose, for now): packing on the true 3D shape (nesting concave parts, free-angle
+turning), poured bulk simulation, foam/tray design and CAD export of dunnage, mixed parts in one
+container, and truck loading of mixed pallets.

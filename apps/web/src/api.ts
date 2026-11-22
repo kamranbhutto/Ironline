@@ -79,6 +79,51 @@ export interface Item {
   unitCost: number;
   salePrice: number;
   active: boolean;
+  packL?: number | null;
+  packW?: number | null;
+  packH?: number | null;
+  packWeight?: number | null;
+  packUpright?: boolean;
+  packNestPitch?: number | null;
+  packSettings?: Record<string, unknown> | null;
+  packSpec?: PackSpec | null;
+}
+/** A part's chosen way of packing and shipping (saved from the Packaging page). */
+export interface PackSpec {
+  method: "layers" | "cells" | "nest";
+  container: { code: string; name: string; kind: string; l: number; w: number; h: number; grade?: string | null };
+  perBox: number;
+  layers: number;
+  perLayer: number;
+  vertical: "h" | "w" | "l";
+  boxGross: number;
+  pallet: { code: string; name: string };
+  boxesPerPallet: number;
+  partsPerPallet: number;
+  vehicle: { code: string; name: string };
+  palletsPerLoad: number;
+  partsPerLoad: number;
+  costPerPart: number;
+  savedAt: string;
+}
+export interface PackAsset {
+  id: string;
+  kind: "carton" | "tote" | "crate" | "pallet" | "vehicle";
+  code: string;
+  name: string;
+  l: number;
+  w: number;
+  h: number;
+  wall: number;
+  tare: number;
+  maxLoad: number;
+  maxHeight: number;
+  cost: number;
+  returnable: boolean;
+  tripCost: number;
+  lifeTrips: number;
+  grade: string | null;
+  active: boolean;
 }
 export interface ItemDetail extends Item {
   routing: { id: string; workCenterId: string; workCenterCode: string; rate: number; description: string | null; setupHours: number; runHoursPerUnit: number }[];
@@ -200,7 +245,7 @@ export interface JobDetail extends Omit<JobSummary, "operationsDone" | "operatio
   log: { id: string; action: string; data: Record<string, unknown>; createdAt: string; userName: string | null }[];
   customerId: string | null;
   customerPo: string | null;
-  part: { partNumber: string; revision: string; name: string; type: string; uom: string } | null;
+  part: { partNumber: string; revision: string; name: string; type: string; uom: string; packSpec?: PackSpec | null } | null;
   revenue: number | null;
   operations: {
     id: string;

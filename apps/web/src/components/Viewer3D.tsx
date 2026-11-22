@@ -150,6 +150,25 @@ function meshStats(mesh: THREE.Mesh) {
   return { area, volume: Math.abs(volume), triangles: Math.floor(n / 3) };
 }
 
+/**
+ * Load a model and measure it without showing it: bounding box (largest side first) and enclosed
+ * volume, in model units, which the viewer treats as millimetres. Used to fill a part's packing size.
+ */
+export async function measureModel(url: string, name: string, prepared: boolean) {
+  const res = await fetch(url, { credentials: "same-origin" });
+  if (!res.ok) throw new Error(`Could not open ${name} (${res.status})`);
+  const buf = await res.arrayBuffer();
+  const obj = prepared ? await buildPrepared(buf) : await buildObject(name, buf);
+  obj.updateMatrixWorld(true);
+  const size = new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3());
+  let volume = 0;
+  obj.traverse((c) => {
+    if (c instanceof THREE.Mesh) volume += meshStats(c).volume;
+  });
+  const dims = [size.x, size.y, size.z].sort((x, y) => y - x) as [number, number, number];
+  return { dims, volume };
+}
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 type Nav = "orbit" | "pan" | "zoom";

@@ -86,3 +86,16 @@ adapts.
 36. **Standard cost of made parts** spreads setup over a batch of 10 pieces, the same basis as
     the part page's cost per piece; it updates when the part or a piece is saved, not when a
     work-center rate changes (run db:recost then).
+37. **Packing works on the part's bounding box** (length × width × height) with the six
+    straight turns. That is exact for box-like parts and a safe (low) count for odd shapes.
+38. **Packing units are millimetres and kilograms**, stored on the part; a 3D model's units
+    are read as millimetres (the viewer does the same).
+39. **Carton price** for made-to-size cartons = board area of a regular slotted carton blank
+    (2L + 2W + 35 mm glue flap) × (H + W) × board price per m², plus 0.35 converting cost.
+    Board grades, prices and weights are typical starting values in `packing.ts`.
+40. **Carton stacking strength** uses the McKee short formula (5.87 × ECT × √(caliper ×
+    perimeter)) with a safety factor of 5 by default; totes and crates are not strength-checked.
+41. **Returnable payback** assumes 250 working days a year and 10% spare containers; freight is
+    included on both sides of the comparison.
+42. **The starter packaging library** is added the first time a shop opens Packaging; its
+    prices are placeholders.

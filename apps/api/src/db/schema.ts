@@ -209,6 +209,18 @@ export const items = pgTable(
     reorderPoint: qty("reorder_point"),
     /** Usual quantity to order when stock falls to the reorder point. */
     reorderQuantity: qty("reorder_quantity"),
+    /** Packing size of one part (its bounding box), mm, and its weight, kg. */
+    packL: qty("pack_l"),
+    packW: qty("pack_w"),
+    packH: qty("pack_h"),
+    packWeight: qty("pack_weight"),
+    /** Must ship this side up. */
+    packUpright: boolean("pack_upright").notNull().default(false),
+    /** Parts that nest into each other: height each extra part adds to a stack, mm. */
+    packNestPitch: qty("pack_nest_pitch"),
+    /** Last packing study settings and the chosen packing spec (see packages/shared/src/packing.ts). */
+    packSettings: jsonb("pack_settings").$type<Record<string, unknown>>(),
+    packSpec: jsonb("pack_spec").$type<Record<string, unknown>>(),
     active: boolean("active").notNull().default(true),
     createdAt: created(),
     updatedAt: updated(),
@@ -858,4 +870,42 @@ export const reports = pgTable(
     updatedBy: userRef("updated_by"),
   },
   (t) => [index("reports_org").on(t.orgId, t.updatedAt)],
+);
+
+// ── Packaging ───────────────────────────────────────────────────────────────
+
+/** The shop's packaging library: cartons, totes, crates, pallets and trucks or containers. */
+export const packAssets = pgTable(
+  "pack_assets",
+  {
+    id: pk(),
+    orgId: orgRef(),
+    kind: text("kind").notNull(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    /** Inside size for containers and vehicles; footprint and deck height for pallets. mm */
+    l: qty("l").notNull(),
+    w: qty("w").notNull(),
+    h: qty("h").notNull(),
+    wall: qty("wall").notNull().default(0),
+    /** kg */
+    tare: qty("tare").notNull().default(0),
+    /** kg of load (containers, pallets) or payload (vehicles); 0 = no limit */
+    maxLoad: qty("max_load").notNull().default(0),
+    /** pallets: tallest loaded height, deck included, mm */
+    maxHeight: qty("max_height").notNull().default(0),
+    cost: money("cost").notNull().default(0),
+    returnable: boolean("returnable").notNull().default(false),
+    tripCost: money("trip_cost").notNull().default(0),
+    lifeTrips: integer("life_trips").notNull().default(1),
+    /** cartons: board grade key */
+    grade: text("grade"),
+    active: boolean("active").notNull().default(true),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    uniqueIndex("pack_assets_org_code").on(t.orgId, t.code),
+    check("pack_assets_kind", inList("kind", ["carton", "tote", "crate", "pallet", "vehicle"])),
+  ],
 );

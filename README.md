@@ -1,7 +1,7 @@
 # Ironline ERP
 
 Shop-management software for job shops and manufacturers: quoting, sales orders, jobs,
-shop floor, scheduling, quality, inventory, purchasing and reports, with shipping,
+shop floor, scheduling, quality, inventory, purchasing, packaging and reports, with shipping,
 invoicing and an AI assistant on the roadmap. Multi-tenant SaaS: many shops share one
 installation, each sees only its own data.
 
@@ -67,6 +67,9 @@ packages/shared Validation schemas and shared maths (pricing, tolerances, purcha
   purchase orders; receiving into lots; vendors with lead times and prices
 - **Reports:** charts and tables over sales, jobs, quotes, labor, inspection, stock and
   purchases; saved reports; pin to the home dashboard
+- **Packaging:** cheapest way to pack and ship each part: containers, pallets and trucks
+  compared on cost per part, made-to-size carton search, returnable payback, 3D views,
+  packing spec on the part and its jobs, printable report
 - Light and dark themes, phone and tablet layouts
 
 See `docs/FEATURES.md` for the full checklist and `docs/ROADMAP.md` for the order of work.

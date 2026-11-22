@@ -159,3 +159,13 @@ These came out of `docs/research/competitor-capabilities.md` and change the targ
   (views: chart, values, group by, split, filters, hidden columns, order, limit, stacked),
   `starred`, `pinned`, created/updated by and at. Columns used in a report are checked
   against the dataset when saving.
+
+## Packaging (migration 0009)
+
+- `items` gains `pack_l`, `pack_w`, `pack_h` (mm), `pack_weight` (kg), `pack_upright`,
+  `pack_nest_pitch`, `pack_settings` (the last study's inputs) and `pack_spec` (the chosen
+  container, counts per container / pallet / truck and cost per part, shown on jobs).
+- `pack_assets` — the shop's library: `kind` (carton, tote, crate, pallet, vehicle), unique
+  `code`, name, inside size (footprint and deck height for pallets), wall, tare, max load or
+  payload, pallet max height, price, returnable with trip cost and life in trips, and the
+  board grade for cartons.

@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  PackageCheck,
   Boxes,
   ChevronRight,
   Factory,
@@ -69,6 +70,7 @@ const GROUPS: NavGroup[] = [
       { to: "/items", label: "Parts & materials", icon: Package },
       { to: "/inventory", label: "Inventory", icon: Boxes },
       { to: "/purchasing", label: "Purchasing", icon: Receipt },
+      { to: "/packaging", label: "Packaging", icon: PackageCheck },
       { to: "/soon/shipping", label: "Shipping", icon: Truck, soon: true },
     ],
   },

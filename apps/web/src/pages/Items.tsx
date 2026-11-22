@@ -7,6 +7,7 @@ import { BomBuilder } from "../components/BomBuilder.tsx";
 import { FilesPanel, PendingFiles, pollWhilePreparing, uploadFiles, type FileRow } from "../components/Files.tsx";
 import { InspectionPlan } from "../components/InspectionPlan.tsx";
 import { PartStock } from "./Inventory.tsx";
+import { PartPacking } from "./PartPacking.tsx";
 import { Badge, Button, ButtonLink, Card, cx, DetailTitle, ErrorNote, InsetField, insetControl, Loading, MetricCard, PageHeader, PillTabs, recordCard, SearchBox, Status, TabPanel, Table, Td, R, ListBar, ViewTabs } from "../components/ui.tsx";
 import { money, num } from "../format.ts";
 
@@ -57,7 +58,7 @@ export function ItemsPage() {
   );
 }
 
-type PartTab = "files" | "cost" | "stock";
+type PartTab = "files" | "cost" | "stock" | "packing";
 type Op = { workCenterId: string; description: string; setupHours: string; runHoursPerUnit: string };
 type Bom = { componentItemId: string; quantityPer: string; scrapPct: string };
 type Form = { partNumber: string; revision: string; description: string; type: string; uom: string; unitCost: string; salePrice: string; active: boolean; routing: Op[]; bom: Bom[] };
@@ -221,6 +222,7 @@ export function ItemEditorPage() {
                 { key: "files", label: "Drawings & 3D", count: fileCount },
                 { key: "cost", label: "Cost", disabled: !made },
                 { key: "stock", label: "Stock", disabled: !id },
+                { key: "packing", label: "Packing", disabled: !id || form.type === "service" },
               ]}
               value={tab}
               onChange={setTab}
@@ -246,6 +248,7 @@ export function ItemEditorPage() {
               />
             ))}
           {tab === "stock" && id && <PartStock itemId={id} />}
+          {tab === "packing" && id && <PartPacking itemId={id} spec={item.data?.packSpec ?? null} size={item.data?.packL ? [item.data.packL, item.data.packW ?? 0, item.data.packH ?? 0, item.data.packWeight ?? 0] : null} />}
           {tab === "cost" && (
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-3">

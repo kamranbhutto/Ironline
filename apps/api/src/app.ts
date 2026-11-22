@@ -28,6 +28,7 @@ import * as messages from "./services/messages.ts";
 import * as quality from "./services/quality.ts";
 import * as inventory from "./services/inventory.ts";
 import * as purchasing from "./services/purchasing.ts";
+import * as packaging from "./services/packaging.ts";
 import * as reportsSvc from "./services/reports.ts";
 import * as subjobs from "./services/subjobs.ts";
 
@@ -185,6 +186,12 @@ export function buildApp(db: Db, opts: { logger?: boolean; secureCookies?: boole
   app.put(`${api}/items/:id`, async (req) =>
     inv.updateItem(db, ctxOf(req), parse(idParam, req.params).id, parse(itemSchema, req.body)),
   );
+
+  // ── Packaging ──
+  app.get(`${api}/pack-assets`, async (req) => packaging.listAssets(db, ctxOf(req)));
+  app.post(`${api}/pack-assets`, async (req, reply) => reply.status(201).send(await packaging.createAsset(db, ctxOf(req), parse(packaging.packAssetSchema, req.body))));
+  app.put(`${api}/pack-assets/:id`, async (req) => packaging.updateAsset(db, ctxOf(req), parse(idParam, req.params).id, parse(packaging.packAssetSchema, req.body)));
+  app.put(`${api}/items/:id/packing`, async (req) => packaging.savePacking(db, ctxOf(req), parse(idParam, req.params).id, parse(packaging.packingSchema, req.body)));
 
   // ── Quotes ──
   app.get(`${api}/quotes`, async (req) => quotesSvc.listQuotes(db, ctxOf(req), parse(listQuery, req.query)));
