@@ -18,13 +18,13 @@ import {
   type PackVehicle,
 } from "@ironline/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Box, Boxes, Check, Pencil, Plus, Printer, Ruler, Save, Sparkles, Truck } from "lucide-react";
+import { Box, Boxes, Check, Layers, ListChecks, Pencil, Plus, Printer, Repeat, Ruler, Save, Sparkles, Truck } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { api, ApiError, type Item, type ItemDetail, type PackAsset, type PackSpec } from "../api.ts";
 import { fileUrl, type FileRow } from "../components/Files.tsx";
 import { PackView3D, type PackViewMode } from "../components/PackView3D.tsx";
-import { Badge, Button, Card, cx, ErrorNote, Field, Input, Loading, MetricCard, Modal, PageHeader, PillTabs, R, Select, Table, Td, ViewTabs } from "../components/ui.tsx";
+import { Badge, Button, Card, cx, ErrorNote, Field, Input, Loading, Modal, PillTabs, R, Select, Table, Td, ViewTabs } from "../components/ui.tsx";
 import { money, num } from "../format.ts";
 
 const KIND_LABEL: Record<PackAsset["kind"], string> = { carton: "Carton", tote: "Tote", crate: "Crate", pallet: "Pallet", vehicle: "Truck or container" };
@@ -36,6 +36,7 @@ const METHODS: [PackSettings["method"], string, string][] = [
 const LIMIT_LABEL: Record<string, string> = { space: "space", weight: "weight", height: "height", strength: "box strength", floor: "floor space" };
 const cost4 = (n: number | null | undefined) => money(n, n != null && Math.abs(n) < 1 ? 4 : 2);
 
+type Panel = "part" | "pack" | "ship" | "compare" | "payback";
 type Study = PackSettings & { containers: string[]; pallets: string[]; vehicles: string[]; winMin: number; winMax: number; annualParts: number; cycleDays: number };
 
 const toContainer = (a: PackAsset): PackContainer => ({ id: a.id, kind: a.kind as PackContainer["kind"], name: `${a.code} · ${a.name}`, l: a.l, w: a.w, h: a.h, wall: a.wall, tare: a.tare, maxLoad: a.maxLoad, cost: a.cost, returnable: a.returnable, tripCost: a.tripCost, lifeTrips: a.lifeTrips, grade: a.grade });
@@ -52,9 +53,12 @@ export function PackagingPage() {
   const view = params.get("view") === "library" ? "library" : "study";
   return (
     <>
-      <PageHeader title="Packaging" sub="Find how to pack and ship each part for the lowest cost per part" />
-      <div className="mb-4">
-        <ViewTabs views={[{ key: "study", label: "Packing study" }, { key: "library", label: "Library" }]} value={view} onChange={(v) => setParams(v === "library" ? { view: "library" } : params.get("item") ? { item: params.get("item")! } : {})} />
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Packaging</h1>
+        <span className="hidden text-sm text-muted md:inline">Cheapest way to pack and ship each part</span>
+        <div className="ml-auto">
+          <ViewTabs views={[{ key: "study", label: "Packing study" }, { key: "library", label: "Library" }]} value={view} onChange={(v) => setParams(v === "library" ? { view: "library" } : params.get("item") ? { item: params.get("item")! } : {})} />
+        </div>
       </div>
       {view === "library" ? <Library /> : <StudyView />}
     </>
@@ -79,6 +83,10 @@ function StudyView() {
   const [explode, setExplode] = useState(0);
   const [fitted, setFitted] = useState<PackOption[]>([]);
   const [measuring, setMeasuring] = useState<string | null>(null);
+  const [panel, setPanel] = useState<Panel>("part");
+  // On short screens the cost breakdown starts folded so the options list keeps its room.
+  const [tallScreen] = useState(() => window.innerHeight >= 860);
+  const [fillRef, fillHeight] = useFillHeight();
 
   const active = useMemo(() => (assets.data ?? []).filter((a) => a.active), [assets.data]);
 
@@ -212,229 +220,299 @@ function StudyView() {
   const returnable = options.find((o) => o.container.returnable);
   const spec = item.data?.packSpec;
 
+  const PANELS: { key: Panel; label: string; icon: typeof Box }[] = [
+    { key: "part", label: "Part", icon: Ruler },
+    { key: "pack", label: "Packing", icon: Layers },
+    { key: "ship", label: "Shipping", icon: Truck },
+    { key: "compare", label: "Compare", icon: ListChecks },
+    { key: "payback", label: "Payback", icon: Repeat },
+  ];
+  const sel = selected;
+
   return (
-    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-      <div className="min-w-0 space-y-4">
-        <Card title="Part">
-          <div className="space-y-3">
-            <Field label="Part">
-              <Select value={itemId} onChange={(e) => setParams(e.target.value ? { item: e.target.value } : {})}>
-                <option value="">Type a size without a part</option>
-                {(parts.data ?? []).filter((p) => p.type !== "service").map((p) => (
-                  <option key={p.id} value={p.id}>{p.partNumber} · {p.description}</option>
-                ))}
-              </Select>
-            </Field>
-            <div className="grid grid-cols-3 gap-2">
-              <Num label="Length mm" value={part.l} onChange={(v) => setPart({ ...part, l: v })} />
-              <Num label="Width mm" value={part.w} onChange={(v) => setPart({ ...part, w: v })} />
-              <Num label="Height mm" value={part.h} onChange={(v) => setPart({ ...part, h: v })} />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Num label="Weight kg" value={part.weight} onChange={(v) => setPart({ ...part, weight: v })} step="0.001" />
-              {study.method === "nest" && <Num label="Nest step mm" value={part.nestPitch} onChange={(v) => setPart({ ...part, nestPitch: v })} hint="Height each extra part adds" />}
-            </div>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={part.upright} onChange={(e) => setPart({ ...part, upright: e.target.checked })} /> This side up (height stays vertical)</label>
-            {itemId && model && (
-              <Button onClick={measure} className="w-full"><Ruler className="h-4 w-4" /> Measure from the 3D model</Button>
-            )}
-            {measuring && <p className="text-xs text-muted">{measuring}</p>}
-            {!packPart && <p className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">Enter the part's length, width, height and weight to see packing options.</p>}
-          </div>
-        </Card>
-
-        <Card title="How to pack">
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              {METHODS.map(([k, l, d]) => (
-                <label key={k} className={cx("flex cursor-pointer gap-2 rounded-lg px-3 py-2 ring-1", study.method === k ? "bg-accent-soft ring-accent" : "ring-line hover:bg-panel-2")}>
-                  <input type="radio" name="method" checked={study.method === k} onChange={() => set("method", k)} className="mt-1" />
-                  <span><span className="text-sm font-medium">{l}</span><span className="block text-xs text-muted">{d}</span></span>
-                </label>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Num label="Clearance mm" value={String(study.margin)} onChange={(v) => set("margin", Number(v) || 0)} hint="Around each part" />
-              {study.method === "cells" ? (
-                <Num label="Divider mm" value={String(study.dividerThickness)} onChange={(v) => set("dividerThickness", Number(v) || 0)} />
-              ) : (
-                <Num label="Layer pad mm" value={String(study.padThickness)} onChange={(v) => set("padThickness", Number(v) || 0)} hint="0 = none" />
-              )}
-              <Num label="Lift limit kg" value={String(study.boxWeightCap)} onChange={(v) => set("boxWeightCap", Number(v) || 0)} hint="0 = none" />
-              <Num label="Stack safety" value={String(study.safetyFactor)} onChange={(v) => set("safetyFactor", Number(v) || 1)} hint="Cartons, ×" />
-            </div>
-          </div>
-        </Card>
-
-        <Card title="Shipping">
-          <div className="space-y-3">
-            <Num label="Parts in this shipment" value={String(study.shipQty)} onChange={(v) => set("shipQty", Math.max(0, Math.floor(Number(v) || 0)))} hint="0 = cost a full truck" />
-            <Field label="Freight priced">
-              <Select value={study.freightMode} onChange={(e) => set("freightMode", e.target.value as Study["freightMode"])}>
-                <option value="pallet">Per pallet (part loads)</option>
-                <option value="load">Per truck (full loads)</option>
-              </Select>
-            </Field>
-            {study.freightMode === "pallet" ? (
-              <Num label="Price per pallet" value={String(study.freightPerPallet)} onChange={(v) => set("freightPerPallet", Number(v) || 0)} />
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                <Num label="Fixed" value={String(study.freightFixed)} onChange={(v) => set("freightFixed", Number(v) || 0)} />
-                <Num label="Per km" value={String(study.freightPerKm)} onChange={(v) => set("freightPerKm", Number(v) || 0)} />
-                <Num label="km" value={String(study.distanceKm)} onChange={(v) => set("distanceKm", Number(v) || 0)} />
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              <Num label="Wrap per pallet" value={String(study.wrapCostPerPallet)} onChange={(v) => set("wrapCostPerPallet", Number(v) || 0)} />
-              <label className="mt-6 flex items-center gap-2 text-sm"><input type="checkbox" checked={study.stackPallets} onChange={(e) => set("stackPallets", e.target.checked)} /> Stack pallets</label>
-            </div>
-          </div>
-        </Card>
-
-        <Card title="Compare" actions={<Link to="/packaging?view=library" className="text-sm text-accent hover:underline">Edit library</Link>}>
-          {(["containers", "pallets", "vehicles"] as const).map((k) => {
-            const kinds: PackAsset["kind"][] = k === "containers" ? ["carton", "tote", "crate"] : k === "pallets" ? ["pallet"] : ["vehicle"];
-            const list = active.filter((a) => kinds.includes(a.kind));
-            return (
-              <fieldset key={k} className="mb-3 last:mb-0">
-                <legend className="mb-1 flex w-full items-center justify-between text-xs font-medium text-muted">
-                  <span>{k === "containers" ? "Containers" : k === "pallets" ? "Pallets" : "Trucks and containers"}</span>
-                  <span className="space-x-2">
-                    <button type="button" className="hover:text-accent" onClick={() => set(k, list.map((a) => a.id))}>All</button>
-                    <button type="button" className="hover:text-accent" onClick={() => set(k, [])}>None</button>
-                  </span>
-                </legend>
-                <div className="max-h-48 space-y-0.5 overflow-y-auto pr-1">
-                  {list.map((a) => (
-                    <label key={a.id} className="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-panel-2">
-                      <input type="checkbox" checked={study[k].includes(a.id)} onChange={() => toggle(k, a.id)} />
-                      <span className="num min-w-0 flex-1 truncate">{a.code} <span className="text-muted">{a.name}</span></span>
-                      {a.returnable && <Badge tone="ok">Returnable</Badge>}
-                    </label>
+    <div ref={fillRef} style={fillHeight ? { height: fillHeight } : undefined} className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)_minmax(0,340px)]">
+      {/* Left: one settings section at a time, chosen from the icon strip. */}
+      <aside className="flex min-h-0 overflow-hidden rounded-xl bg-panel shadow-panel ring-1 ring-line/70">
+        <nav className="flex w-[68px] shrink-0 flex-col gap-1 border-r border-line bg-panel-2/60 p-1.5" aria-label="Study settings">
+          {PANELS.map((x) => (
+            <button
+              key={x.key}
+              type="button"
+              aria-pressed={panel === x.key}
+              onClick={() => setPanel(x.key)}
+              className={cx("flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium transition", panel === x.key ? "bg-accent text-accent-ink shadow-sm" : "text-muted hover:bg-panel hover:text-ink")}
+            >
+              <x.icon className="h-5 w-5" aria-hidden />
+              {x.label}
+            </button>
+          ))}
+        </nav>
+        <div className="min-w-0 flex-1 overflow-y-auto p-4">
+          {panel === "part" && (
+            <div className="space-y-3">
+              <h2 className="text-base font-semibold">Part</h2>
+              <Field label="Part">
+                <Select value={itemId} onChange={(e) => setParams(e.target.value ? { item: e.target.value } : {})}>
+                  <option value="">Type a size without a part</option>
+                  {(parts.data ?? []).filter((p) => p.type !== "service").map((p) => (
+                    <option key={p.id} value={p.id}>{p.partNumber} · {p.description}</option>
                   ))}
+                </Select>
+              </Field>
+              {itemId && model && (
+                <Button onClick={measure} className="w-full"><Ruler className="h-4 w-4" /> Measure from the 3D model</Button>
+              )}
+              {measuring && <p className="text-xs text-muted">{measuring}</p>}
+              <div className="grid grid-cols-3 gap-2">
+                <Num label="Length mm" value={part.l} onChange={(v) => setPart({ ...part, l: v })} />
+                <Num label="Width mm" value={part.w} onChange={(v) => setPart({ ...part, w: v })} />
+                <Num label="Height mm" value={part.h} onChange={(v) => setPart({ ...part, h: v })} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Num label="Weight kg" value={part.weight} onChange={(v) => setPart({ ...part, weight: v })} step="0.001" />
+                {study.method === "nest" && <Num label="Nest step mm" value={part.nestPitch} onChange={(v) => setPart({ ...part, nestPitch: v })} hint="Height each extra part adds" />}
+              </div>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={part.upright} onChange={(e) => setPart({ ...part, upright: e.target.checked })} /> This side up (height stays vertical)</label>
+              {!packPart && <p className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">Enter the part's length, width, height and weight to see packing options.</p>}
+              {spec && (
+                <p className="flex gap-2 rounded-lg bg-ok-soft px-3 py-2 text-xs text-ink"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ok" /> <span>Saved packing for this part: <b>{spec.perBox} per {spec.container.code}</b>, {spec.boxesPerPallet} per pallet, {cost4(spec.costPerPart)} a part.</span></p>
+              )}
+            </div>
+          )}
+          {panel === "pack" && (
+            <div className="space-y-3">
+              <h2 className="text-base font-semibold">How to pack</h2>
+              <div className="space-y-1.5">
+                {METHODS.map(([k, l, d]) => (
+                  <label key={k} className={cx("flex cursor-pointer gap-2 rounded-lg px-3 py-2 ring-1", study.method === k ? "bg-accent-soft ring-accent" : "ring-line hover:bg-panel-2")}>
+                    <input type="radio" name="method" checked={study.method === k} onChange={() => set("method", k)} className="mt-1" />
+                    <span><span className="text-sm font-medium">{l}</span><span className="block text-xs text-muted">{d}</span></span>
+                  </label>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Num label="Clearance mm" value={String(study.margin)} onChange={(v) => set("margin", Number(v) || 0)} hint="Around each part" />
+                {study.method === "cells" ? (
+                  <Num label="Divider mm" value={String(study.dividerThickness)} onChange={(v) => set("dividerThickness", Number(v) || 0)} />
+                ) : (
+                  <Num label="Layer pad mm" value={String(study.padThickness)} onChange={(v) => set("padThickness", Number(v) || 0)} hint="0 = none" />
+                )}
+                <Num label="Lift limit kg" value={String(study.boxWeightCap)} onChange={(v) => set("boxWeightCap", Number(v) || 0)} hint="Cartons and totes" />
+                <Num label="Stack safety" value={String(study.safetyFactor)} onChange={(v) => set("safetyFactor", Number(v) || 1)} hint="Cartons, ×" />
+              </div>
+              {study.method === "nest" && !part.nestPitch && <p className="text-xs text-muted">Set the nest step on the Part tab.</p>}
+            </div>
+          )}
+          {panel === "ship" && (
+            <div className="space-y-3">
+              <h2 className="text-base font-semibold">Shipping</h2>
+              <Num label="Parts in this shipment" value={String(study.shipQty)} onChange={(v) => set("shipQty", Math.max(0, Math.floor(Number(v) || 0)))} hint="0 = cost a full truck" />
+              <Field label="Freight priced">
+                <Select value={study.freightMode} onChange={(e) => set("freightMode", e.target.value as Study["freightMode"])}>
+                  <option value="pallet">Per pallet (part loads)</option>
+                  <option value="load">Per truck (full loads)</option>
+                </Select>
+              </Field>
+              {study.freightMode === "pallet" ? (
+                <Num label="Price per pallet" value={String(study.freightPerPallet)} onChange={(v) => set("freightPerPallet", Number(v) || 0)} />
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  <Num label="Fixed" value={String(study.freightFixed)} onChange={(v) => set("freightFixed", Number(v) || 0)} />
+                  <Num label="Per km" value={String(study.freightPerKm)} onChange={(v) => set("freightPerKm", Number(v) || 0)} />
+                  <Num label="km" value={String(study.distanceKm)} onChange={(v) => set("distanceKm", Number(v) || 0)} />
                 </div>
-              </fieldset>
+              )}
+              <Num label="Wrap per pallet" value={String(study.wrapCostPerPallet)} onChange={(v) => set("wrapCostPerPallet", Number(v) || 0)} />
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={study.stackPallets} onChange={(e) => set("stackPallets", e.target.checked)} /> Pallets may be stacked in the truck</label>
+            </div>
+          )}
+          {panel === "compare" && (
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-base font-semibold">Compare</h2>
+                <Link to="/packaging?view=library" className="text-sm text-accent hover:underline">Edit library</Link>
+              </div>
+              {(["containers", "pallets", "vehicles"] as const).map((k) => {
+                const kinds: PackAsset["kind"][] = k === "containers" ? ["carton", "tote", "crate"] : k === "pallets" ? ["pallet"] : ["vehicle"];
+                const list = active.filter((a) => kinds.includes(a.kind));
+                return (
+                  <fieldset key={k} className="mb-4 last:mb-0">
+                    <legend className="mb-1 flex w-full items-center justify-between text-xs font-medium text-muted">
+                      <span>{k === "containers" ? "Containers" : k === "pallets" ? "Pallets" : "Trucks and containers"}</span>
+                      <span className="space-x-2">
+                        <button type="button" className="hover:text-accent" onClick={() => set(k, list.map((a) => a.id))}>All</button>
+                        <button type="button" className="hover:text-accent" onClick={() => set(k, [])}>None</button>
+                      </span>
+                    </legend>
+                    <div className="space-y-0.5">
+                      {list.map((a) => (
+                        <label key={a.id} className="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-panel-2">
+                          <input type="checkbox" checked={study[k].includes(a.id)} onChange={() => toggle(k, a.id)} />
+                          <span className="num min-w-0 flex-1 truncate" title={a.name}>{a.code} <span className="text-muted">{a.name}</span></span>
+                          {a.returnable && <Badge tone="ok">Returnable</Badge>}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                );
+              })}
+              <div className="mt-2 rounded-lg bg-panel-2 p-3 text-xs text-muted">
+                <div className="mb-1.5 font-medium text-ink">Made-to-size carton search</div>
+                Sides from
+                <input aria-label="Smallest carton side, mm" type="number" min={50} value={study.winMin} onChange={(e) => set("winMin", Number(e.target.value) || 0)} className="num mx-1 w-16 rounded-md bg-panel px-1.5 py-0.5 ring-1 ring-line" />
+                to
+                <input aria-label="Largest carton side, mm" type="number" min={100} value={study.winMax} onChange={(e) => set("winMax", Number(e.target.value) || 0)} className="num mx-1 w-16 rounded-md bg-panel px-1.5 py-0.5 ring-1 ring-line" />
+                mm.
+              </div>
+            </div>
+          )}
+          {panel === "payback" && (
+            <div className="space-y-3">
+              <h2 className="text-base font-semibold">Returnable or one-way?</h2>
+              {oneWay && returnable ? (
+                <Roi oneWay={oneWay} returnable={returnable} annualParts={study.annualParts} cycleDays={study.cycleDays} onAnnual={(v) => set("annualParts", v)} onCycle={(v) => set("cycleDays", v)} />
+              ) : (
+                <p className="text-sm text-muted">Tick at least one returnable tote and one one-way container under Compare to see the payback.</p>
+              )}
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* Centre: the 3D workspace. */}
+      <section className="relative min-h-[460px] overflow-hidden rounded-xl bg-gradient-to-b from-panel-2 to-panel shadow-panel ring-1 ring-line/70 lg:min-h-0">
+        {sel ? (
+          <div data-packview className="absolute inset-0">
+            <PackView3D option={sel} mode={mode} explode={explode} className="h-full w-full" />
+          </div>
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-muted">
+            <Boxes className="h-10 w-10 text-accent" />
+            <p className="max-w-sm text-sm">{packPart ? "Nothing in the selection fits this part. Choose larger containers under Compare." : "Choose a part and enter its size and weight on the left. The best way to pack it appears here in 3D."}</p>
+          </div>
+        )}
+        {sel && (
+          <>
+            <div className="pointer-events-none absolute inset-x-3 top-3 flex flex-wrap items-start justify-between gap-2">
+              <div className="pointer-events-auto rounded-xl bg-panel/95 p-1 shadow-panel ring-1 ring-line">
+                <PillTabs<PackViewMode> tabs={[{ key: "box", label: "Inside" }, { key: "pallet", label: "Pallet" }, { key: "truck", label: "Truck" }]} value={mode} onChange={setMode} />
+              </div>
+              <div className="pointer-events-auto max-w-[60%] rounded-lg bg-panel/95 px-3 py-1.5 text-right text-xs shadow-panel ring-1 ring-line">
+                <div className="truncate font-medium text-ink">{sel.container.name}</div>
+                <div className="text-muted">
+                  {mode === "box" && `${sel.box.perLayer} a layer × ${sel.box.layers} ${sel.box.layers === 1 ? "layer" : "layers"}${sel.box.perStack > 1 ? ` × ${sel.box.perStack} nested` : ""} · fill ${num(sel.box.fill * 100, 0)}%`}
+                  {mode === "pallet" && `${sel.pallet.name.split(" · ")[0]} · ${sel.palletLoad.perLayer} a layer × ${sel.palletLoad.layers} · ${num(sel.palletLoad.height, 0)} mm · ${num(sel.palletLoad.gross, 0)} kg`}
+                  {mode === "truck" && `${sel.vehicle.name.split(" · ")[0]} · ${sel.load.perFloor} on the floor${sel.load.tiers > 1 ? ` × ${sel.load.tiers} high` : ""} · ${sel.load.pallets} pallets`}
+                </div>
+              </div>
+            </div>
+            <div className="pointer-events-none absolute inset-x-3 bottom-3 flex flex-wrap items-end justify-between gap-2">
+              <div className="pointer-events-auto grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                <Chip label="Cost per part" value={cost4(sel.rankCost)} strong />
+                <Chip label="Per container" value={num(sel.box.count, 0)} />
+                <Chip label="Per pallet" value={num(sel.partsPerPallet, 0)} />
+                <Chip label="Per truck" value={num(sel.partsPerLoad, 0)} />
+              </div>
+              {mode !== "truck" && (
+                <label className="pointer-events-auto flex items-center gap-2 rounded-lg bg-panel/95 px-3 py-1.5 text-xs shadow-panel ring-1 ring-line">
+                  Spread layers
+                  <input type="range" min={0} max={1} step={0.05} value={explode} onChange={(e) => setExplode(Number(e.target.value))} />
+                </label>
+              )}
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* Right: the options, cheapest first, and what the selected one costs. */}
+      <aside className="flex min-h-0 flex-col overflow-hidden rounded-xl bg-panel shadow-panel ring-1 ring-line/70">
+        <div className="shrink-0 space-y-2 border-b border-line p-3">
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-base font-semibold"><Boxes className="h-4 w-4 text-accent" /> Options</h2>
+            <span className="text-xs text-muted">{options.length ? `${options.length}, cheapest first` : ""}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <Button onClick={runFit} disabled={!packPart || !study.pallets.length || !study.vehicles.length} className="col-span-2"><Sparkles className="h-4 w-4" /> Find best carton size</Button>
+            {itemId && <Button variant="primary" onClick={() => savePacking.mutate(true)} disabled={!sel || savePacking.isPending}><Check className="h-4 w-4" /> Use for part</Button>}
+            <Button onClick={() => sel && printReport(sel, item.data ?? null, packPart!, study)} disabled={!sel} className={itemId ? "" : "col-span-2"}><Printer className="h-4 w-4" /> Report</Button>
+          </div>
+          {itemId && (
+            <div className="flex items-center justify-between text-xs">
+              <button type="button" onClick={() => savePacking.mutate(false)} disabled={savePacking.isPending} className="inline-flex items-center gap-1 text-muted hover:text-accent"><Save className="h-3.5 w-3.5" /> Save inputs only</button>
+              {savePacking.isSuccess && <span className="text-ok">Saved</span>}
+            </div>
+          )}
+          <ErrorNote error={savePacking.error} />
+        </div>
+        <ul className="min-h-[200px] flex-1 space-y-1.5 overflow-y-auto p-2" aria-label="Packing options">
+          {options.slice(0, 80).map((o, i) => {
+            const k = keyOf(o);
+            const on = sel && keyOf(sel) === k;
+            const limits = [o.box.limitedBy === "weight" && "lift weight", o.palletLoad.limitedBy !== "height" && `pallet ${LIMIT_LABEL[o.palletLoad.limitedBy]}`, o.load.limitedBy === "weight" && "truck payload"].filter(Boolean);
+            return (
+              <li key={k}>
+                <button type="button" onClick={() => setSelKey(k)} aria-pressed={!!on} className={cx("w-full rounded-lg px-3 py-2 text-left ring-1 transition", on ? "bg-accent-soft ring-2 ring-accent" : "ring-line hover:bg-panel-2")}>
+                  <div className="flex items-center gap-1.5">
+                    {i === 0 && <Badge tone="ok">Best</Badge>}
+                    {o.container.id.startsWith("fit-") && <Badge tone="accent">Made to size</Badge>}
+                    {o.container.returnable && <Badge tone="ok">Returnable</Badge>}
+                    <span className="num ml-auto text-sm font-semibold">{cost4(o.rankCost)}</span>
+                  </div>
+                  <div className="mt-1 truncate text-sm font-medium" title={o.container.name}>{o.container.name}</div>
+                  <div className="mt-0.5 flex justify-between gap-2 text-xs text-muted">
+                    <span className="truncate">{o.pallet.name.split(" · ")[0]} · {o.vehicle.name.split(" · ")[0]}</span>
+                    <span className="num shrink-0">{num(o.box.count, 0)} / {num(o.partsPerPallet, 0)} / {num(o.partsPerLoad, 0)}</span>
+                  </div>
+                  {limits.length > 0 && <div className="mt-0.5 text-[11px] text-warn">Limited by {limits.join(", ")}</div>}
+                </button>
+              </li>
             );
           })}
-        </Card>
-      </div>
-
-      <div className="min-w-0 space-y-4">
-        {spec && (
-          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-ok-soft px-4 py-3 text-sm text-ok ring-1 ring-ok/30">
-            <Check className="h-4 w-4" />
-            <span className="text-ink">Saved packing for this part: <b>{spec.perBox} per {spec.container.code}</b>, {spec.boxesPerPallet} per pallet, {cost4(spec.costPerPart)} a part.</span>
-          </div>
+          {!options.length && <li className="px-3 py-8 text-center text-sm text-muted">{packPart ? "Nothing fits. Choose larger containers under Compare." : "Enter the part size to compare options."}</li>}
+        </ul>
+        {sel && (
+          <details className="shrink-0 border-t border-line p-3" open={tallScreen}>
+            <summary className="cursor-pointer text-sm font-semibold">Cost per part and instruction</summary>
+            <dl className="mt-2 space-y-1 text-sm">
+              <Line label={sel.container.returnable ? "Container trips and wear" : "Container"} value={cost4(sel.perPart.container)} />
+              <Line label="Pads and dividers" value={cost4(sel.perPart.dunnage)} />
+              <Line label="Pallet and wrap" value={cost4(sel.perPart.pallet)} />
+              <Line label="Freight" value={cost4(sel.perPart.freight)} />
+              <div className="border-t border-line pt-1"><Line label={<b>On a full truck</b>} value={<b>{cost4(sel.perPart.total)}</b>} /></div>
+              {sel.shipment && (
+                <Line label={`${num(sel.shipment.qty, 0)} parts: ${sel.shipment.boxes} containers, ${sel.shipment.pallets} ${sel.shipment.pallets === 1 ? "pallet" : "pallets"}`} value={<b>{money(sel.shipment.total)}</b>} />
+              )}
+            </dl>
+            <p className="mt-2 text-xs text-muted">{instruction(sel, study.method)}</p>
+          </details>
         )}
-        <div className="grid grid-cols-2 gap-3 2xl:grid-cols-4">
-          <MetricCard label="Lowest cost per part" value={best ? cost4(best.rankCost) : "—"} tone="accent" note={best ? (best.shipment ? `Shipping ${num(best.shipment.qty, 0)} parts` : "On a full truck") : "No option fits yet"} />
-          <MetricCard label="Parts per container" value={best ? num(best.box.count, 0) : "—"} tone="line" note={best ? best.container.name.split(" · ")[0] : undefined} />
-          <MetricCard label="Parts per pallet" value={best ? num(best.partsPerPallet, 0) : "—"} tone="line" note={best ? `${best.palletLoad.boxes} containers` : undefined} />
-          <MetricCard label="Parts per truck" value={best ? num(best.partsPerLoad, 0) : "—"} tone="line" note={best ? `${best.load.pallets} pallets` : undefined} />
-        </div>
-
-        <Card
-          pad={false}
-          title={<span className="flex items-center gap-2"><Boxes className="h-4 w-4 text-accent" /> Options, cheapest per part first</span>}
-          actions={
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={runFit} disabled={!packPart || !study.pallets.length || !study.vehicles.length}><Sparkles className="h-4 w-4" /> Find best carton size</Button>
-              {itemId && <Button onClick={() => savePacking.mutate(false)} disabled={savePacking.isPending}><Save className="h-4 w-4" /> Save inputs</Button>}
-              {itemId && <Button variant="primary" onClick={() => savePacking.mutate(true)} disabled={!selected || savePacking.isPending}><Check className="h-4 w-4" /> Use for this part</Button>}
-              <Button onClick={() => selected && printReport(selected, item.data ?? null, packPart!, study)} disabled={!selected}><Printer className="h-4 w-4" /> Report</Button>
-            </div>
-          }
-        >
-          <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2 text-xs text-muted">
-            Carton search window
-            <input aria-label="Smallest carton side, mm" type="number" min={50} value={study.winMin} onChange={(e) => set("winMin", Number(e.target.value) || 0)} className="num w-20 rounded-md bg-panel-2 px-2 py-1 ring-1 ring-line" />
-            to
-            <input aria-label="Largest carton side, mm" type="number" min={100} value={study.winMax} onChange={(e) => set("winMax", Number(e.target.value) || 0)} className="num w-20 rounded-md bg-panel-2 px-2 py-1 ring-1 ring-line" />
-            mm per side, sized for the selected pallet and truck.
-            {savePacking.isSuccess && <span className="ml-auto text-ok">Saved</span>}
-          </div>
-          <ErrorNote error={savePacking.error} />
-          <Table head={["Container", "Pallet · truck", R("Per container"), R("Kg"), R("Per pallet"), R("Per truck"), "Limited by", R(study.shipQty > 0 ? "Per part (this shipment)" : "Per part")]} empty={packPart ? "Nothing in the selection fits this part. Choose larger containers or turn on more of the library." : "Enter the part size to compare options."}>
-            {options.slice(0, 60).map((o, i) => {
-              const k = keyOf(o);
-              const on = selected && keyOf(selected) === k;
-              const limits = [o.box.limitedBy === "weight" && "lift weight", o.palletLoad.limitedBy !== "height" && `pallet ${LIMIT_LABEL[o.palletLoad.limitedBy]}`, o.load.limitedBy === "weight" && "truck payload"].filter(Boolean);
-              return (
-                <tr key={k} onClick={() => setSelKey(k)} className={cx("cursor-pointer", on ? "bg-accent-soft" : "hover:bg-panel-2")}>
-                  <Td className="max-w-56">
-                    <div className="flex items-center gap-1.5">
-                      {i === 0 && <Badge tone="ok">Best</Badge>}
-                      {o.container.id.startsWith("fit-") && <Badge tone="accent">Made to size</Badge>}
-                      <span className="truncate font-medium">{o.container.name}</span>
-                    </div>
-                    {o.container.grade && !o.container.id.startsWith("fit-") && <div className="text-xs text-muted">{BOARD_GRADES.find((g) => g.key === o.container.grade)?.label}</div>}
-                  </Td>
-                  <Td className="whitespace-nowrap text-sm">{o.pallet.name.split(" · ")[0]}<div className="text-xs text-muted">{o.vehicle.name.split(" · ")[0]}</div></Td>
-                  <Td right>{num(o.box.count, 0)}</Td>
-                  <Td right>{num(o.boxGross, 1)}</Td>
-                  <Td right>{num(o.partsPerPallet, 0)}</Td>
-                  <Td right>{num(o.partsPerLoad, 0)}</Td>
-                  <Td className="text-xs text-muted">{limits.length ? limits.join(", ") : "space"}</Td>
-                  <Td right className="font-semibold">{cost4(o.rankCost)}</Td>
-                </tr>
-              );
-            })}
-          </Table>
-        </Card>
-
-        {selected && (
-          <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_340px]">
-            <Card
-              pad={false}
-              title={<span className="truncate">{selected.container.name}</span>}
-              actions={<PillTabs<PackViewMode> tabs={[{ key: "box", label: "Inside" }, { key: "pallet", label: "Pallet" }, { key: "truck", label: "Truck" }]} value={mode} onChange={setMode} />}
-            >
-              <div data-packview className="relative h-[440px] bg-gradient-to-b from-panel-2 to-panel">
-                <PackView3D option={selected} mode={mode} explode={explode} className="h-full w-full" />
-                {mode !== "truck" && (
-                  <label className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg bg-panel/90 px-3 py-1.5 text-xs shadow-panel ring-1 ring-line">
-                    Spread layers
-                    <input type="range" min={0} max={1} step={0.05} value={explode} onChange={(e) => setExplode(Number(e.target.value))} />
-                  </label>
-                )}
-                <div className="absolute right-3 top-3 rounded-lg bg-panel/90 px-3 py-1.5 text-xs shadow-panel ring-1 ring-line">
-                  {mode === "box" && `${selected.box.perLayer} a layer × ${selected.box.layers} ${selected.box.layers === 1 ? "layer" : "layers"}${selected.box.perStack > 1 ? ` × ${selected.box.perStack} nested` : ""} · fill ${num(selected.box.fill * 100, 0)}%`}
-                  {mode === "pallet" && `${selected.palletLoad.perLayer} a layer × ${selected.palletLoad.layers} · ${num(selected.palletLoad.height, 0)} mm tall · ${num(selected.palletLoad.gross, 0)} kg`}
-                  {mode === "truck" && `${selected.load.perFloor} on the floor${selected.load.tiers > 1 ? ` × ${selected.load.tiers} high` : ""} · ${selected.load.pallets} pallets`}
-                </div>
-              </div>
-            </Card>
-            <div className="space-y-4">
-              <Card title="Cost per part">
-                <dl className="space-y-1.5 text-sm">
-                  <Line label={selected.container.returnable ? "Container trips and wear" : "Container"} value={cost4(selected.perPart.container)} />
-                  <Line label="Pads and dividers" value={cost4(selected.perPart.dunnage)} />
-                  <Line label="Pallet and wrap" value={cost4(selected.perPart.pallet)} />
-                  <Line label="Freight" value={cost4(selected.perPart.freight)} />
-                  <div className="border-t border-line pt-1.5"><Line label={<b>On a full truck</b>} value={<b>{cost4(selected.perPart.total)}</b>} /></div>
-                  {selected.shipment && (
-                    <div className="rounded-lg bg-panel-2 p-2.5">
-                      <Line label={`${num(selected.shipment.qty, 0)} parts`} value={<b>{money(selected.shipment.total)}</b>} />
-                      <div className="text-xs text-muted">{selected.shipment.boxes} containers on {selected.shipment.pallets} {selected.shipment.pallets === 1 ? "pallet" : "pallets"}{selected.shipment.loads > 1 ? `, ${selected.shipment.loads} trucks` : ""} · {cost4(selected.shipment.perPart)} a part</div>
-                    </div>
-                  )}
-                </dl>
-              </Card>
-              <Card title="Packing instruction">
-                <p className="text-sm">{instruction(selected, study.method)}</p>
-              </Card>
-            </div>
-          </div>
-        )}
-
-        {oneWay && returnable && (
-          <Card title={<span className="flex items-center gap-2"><Truck className="h-4 w-4 text-accent" /> Returnable or one-way?</span>}>
-            <Roi oneWay={oneWay} returnable={returnable} annualParts={study.annualParts} cycleDays={study.cycleDays} onAnnual={(v) => set("annualParts", v)} onCycle={(v) => set("cycleDays", v)} />
-          </Card>
-        )}
-      </div>
+      </aside>
     </div>
   );
+}
+
+/** A small figure over the 3D view. */
+function Chip({ label, value, strong }: { label: string; value: ReactNode; strong?: boolean }) {
+  return (
+    <div className={cx("rounded-lg px-3 py-1.5 shadow-panel ring-1", strong ? "bg-accent text-accent-ink ring-accent" : "bg-panel/95 ring-line")}>
+      <div className={cx("text-[11px]", strong ? "opacity-85" : "text-muted")}>{label}</div>
+      <div className="num text-base font-semibold leading-tight">{value}</div>
+    </div>
+  );
+}
+
+/** On large screens the workspace fills the window below its top edge, so nothing scrolls. */
+function useFillHeight() {
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const [h, setH] = useState<number | null>(null);
+  useEffect(() => {
+    if (!el) return;
+    const measure = () => setH(window.innerWidth < 1024 ? null : Math.max(520, Math.floor(window.innerHeight - el.getBoundingClientRect().top - 28)));
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [el]);
+  return [setEl, h] as const;
 }
 
 function instruction(o: PackOption, method: PackSettings["method"]) {
@@ -453,7 +531,7 @@ function Roi({ oneWay, returnable, annualParts, cycleDays, onAnnual, onCycle }: 
     returnablePerPart: returnable.perPart.total - returnable.perPart.capital,
   });
   return (
-    <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
+    <div className="space-y-3">
       <div className="space-y-2">
         <Num label="Parts a year" value={String(annualParts)} onChange={(v) => onAnnual(Math.max(0, Number(v) || 0))} />
         <Num label="Days a container is away" value={String(cycleDays)} onChange={(v) => onCycle(Math.max(1, Number(v) || 1))} hint="Out, unload, and back" />
@@ -462,7 +540,7 @@ function Roi({ oneWay, returnable, annualParts, cycleDays, onAnnual, onCycle }: 
         <p className="text-muted">
           Best one-way: <b className="text-ink">{oneWay.container.name.split(" · ")[0]}</b> at {cost4(oneWay.perPart.total)} a part. Best returnable: <b className="text-ink">{returnable.container.name.split(" · ")[0]}</b> at {cost4(returnable.perPart.total - returnable.perPart.capital)} a part to run, before buying the fleet.
         </p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2">
           <MiniStat label="Fleet needed" value={`${num(r.fleet, 0)}`} />
           <MiniStat label="Fleet cost" value={money(r.capital, 0)} />
           <MiniStat label="Saving a year" value={money(r.annualSaving, 0)} tone={r.annualSaving > 0 ? "ok" : "bad"} />

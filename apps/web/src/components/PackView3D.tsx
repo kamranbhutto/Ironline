@@ -112,7 +112,7 @@ function edges(list: Block[], color: number) {
 
 export function PackView3D({ option, mode, explode = 0, className }: { option: PackOption; mode: PackViewMode; explode?: number; className?: string }) {
   const host = useRef<HTMLDivElement>(null);
-  const camState = useRef<{ mode: PackViewMode; pos: THREE.Vector3; target: THREE.Vector3 } | null>(null);
+  const camState = useRef<{ mode: PackViewMode; pos: THREE.Vector3; target: THREE.Vector3; moved: boolean } | null>(null);
 
   useEffect(() => {
     const el = host.current;
@@ -163,13 +163,22 @@ export function PackView3D({ option, mode, explode = 0, className }: { option: P
     controls.enableDamping = true;
     const target = new THREE.Vector3(0, size.y / 2, 0);
     const prev = camState.current;
-    if (prev && prev.mode === mode) {
-      camera.position.copy(prev.pos);
-      controls.target.copy(prev.target);
-    } else {
-      camera.position.set(radius * 2.1, radius * 1.6, radius * 2.5);
+    // Fit the whole load in view, whichever way the viewport is shaped, until the user moves the camera.
+    let moved = !!(prev && prev.mode === mode && prev.moved);
+    const dir = new THREE.Vector3(1.6, 1.15, 1.9).normalize();
+    const fit = () => {
+      const v = THREE.MathUtils.degToRad(camera.fov) / 2;
+      const hz = Math.atan(Math.tan(v) * camera.aspect);
+      const dist = (radius * 1.08) / Math.sin(Math.min(v, hz));
+      camera.position.copy(target).addScaledVector(dir, dist);
       controls.target.copy(target);
+      controls.update();
+    };
+    if (moved) {
+      camera.position.copy(prev!.pos);
+      controls.target.copy(prev!.target);
     }
+    controls.addEventListener("start", () => (moved = true));
     controls.update();
 
     const resize = () => {
@@ -180,6 +189,7 @@ export function PackView3D({ option, mode, explode = 0, className }: { option: P
       renderer.domElement.style.height = "100%";
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      if (!moved) fit();
     };
     const ro = new ResizeObserver(resize);
     ro.observe(el);
@@ -192,7 +202,7 @@ export function PackView3D({ option, mode, explode = 0, className }: { option: P
     };
     tick();
     return () => {
-      camState.current = { mode, pos: camera.position.clone(), target: controls.target.clone() };
+      camState.current = { mode, pos: camera.position.clone(), target: controls.target.clone(), moved };
       cancelAnimationFrame(raf);
       ro.disconnect();
       controls.dispose();
