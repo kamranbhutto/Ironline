@@ -50,6 +50,12 @@ describe("fillContainer", () => {
     expect(f.count).toBe(34); // (18 − 1 kg box) / 0.5 kg
     expect(f.limitedBy).toBe("weight");
   });
+  it("does not apply the lift limit to crates", () => {
+    const crate = { ...tote, id: "c", kind: "crate" as const, tare: 45, maxLoad: 800, returnable: false };
+    const o = evaluate(part, crate, { ...pallet, maxLoad: 2000 }, truck, { ...s, boxWeightCap: 18 })!;
+    expect(o).not.toBeNull();
+    expect(o.box.count).toBe(60);
+  });
   it("keeps the part upright when asked", () => {
     const f = fillContainer({ ...part, upright: true }, { l: 300, w: 200, h: 90 }, 1, 0, s)!;
     expect(f.vertical).toBe("h");

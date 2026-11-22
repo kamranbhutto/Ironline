@@ -19,7 +19,7 @@ import {
 } from "@ironline/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Box, Boxes, Check, Pencil, Plus, Printer, Ruler, Save, Sparkles, Truck } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { api, ApiError, type Item, type ItemDetail, type PackAsset, type PackSpec } from "../api.ts";
 import { fileUrl, type FileRow } from "../components/Files.tsx";
@@ -82,9 +82,13 @@ function StudyView() {
 
   const active = useMemo(() => (assets.data ?? []).filter((a) => a.active), [assets.data]);
 
-  // A study starts from the part's saved settings, or from sensible defaults.
+  // A study starts from the part's saved settings, or from sensible defaults — once per part,
+  // so saving (which refetches the part) keeps the options and the selected row.
+  const startedFor = useRef<string | null>(null);
   useEffect(() => {
     if (!assets.data || (itemId && !item.data)) return;
+    if (startedFor.current === itemId) return;
+    startedFor.current = itemId;
     const saved = (item.data?.packSettings ?? null) as Partial<Study> | null;
     const ids = (kinds: PackAsset["kind"][]) => active.filter((a) => kinds.includes(a.kind)).map((a) => a.id);
     const keep = (list: unknown, fallback: string[]) => {
@@ -564,7 +568,8 @@ function Library() {
 
 function AssetModal({ value, onClose }: { value: Omit<PackAsset, "id"> & { id?: string }; onClose: () => void }) {
   const qc = useQueryClient();
-  const [f, setF] = useState(() => Object.fromEntries(Object.entries(value).map(([k, v]) => [k, typeof v === "number" ? String(v) : v])) as Record<string, string | boolean | null>);
+  // New items start with empty number boxes rather than "0".
+  const [f, setF] = useState(() => Object.fromEntries(Object.entries(value).map(([k, v]) => [k, typeof v === "number" ? (v === 0 && !value.id ? "" : String(v)) : v])) as Record<string, string | boolean | null>);
   const save = useMutation({
     mutationFn: () => {
       const n = (k: string) => Number(f[k] || 0);

@@ -236,12 +236,15 @@ export interface BoxFill {
   dividerM2: number;
 }
 
-/** How many parts fit in a container and how they sit. */
-export function fillContainer(part: PackPart, inner: Dims, tare: number, maxLoad: number, s: PackSettings): BoxFill | null {
+/**
+ * How many parts fit in a container and how they sit. The lift limit only applies to containers
+ * people carry (cartons and totes); crates go by forklift.
+ */
+export function fillContainer(part: PackPart, inner: Dims, tare: number, maxLoad: number, s: PackSettings, handLifted = true): BoxFill | null {
   const m = s.margin * 2;
   const choices: { vertical: BoxFill["vertical"]; p: number; q: number; r: number }[] = [{ vertical: "h", p: part.l, q: part.w, r: part.h }];
   if (!part.upright && s.method !== "nest") choices.push({ vertical: "w", p: part.l, q: part.h, r: part.w }, { vertical: "l", p: part.w, q: part.h, r: part.l });
-  const capKg = Math.min(maxLoad > 0 ? maxLoad : Infinity, s.boxWeightCap > 0 ? s.boxWeightCap - tare : Infinity);
+  const capKg = Math.min(maxLoad > 0 ? maxLoad : Infinity, handLifted && s.boxWeightCap > 0 ? s.boxWeightCap - tare : Infinity);
   const weightCap = part.weight > 0 ? Math.max(0, Math.floor(capKg / part.weight + EPS)) : Infinity;
   let best: BoxFill | null = null;
   for (const c of choices) {
@@ -380,7 +383,7 @@ const perUse = (x: { cost: number; returnable: boolean; tripCost: number; lifeTr
   x.returnable ? x.tripCost + x.cost / Math.max(1, x.lifeTrips) : x.cost;
 
 export function evaluate(part: PackPart, container: PackContainer, pallet: PackPallet, vehicle: PackVehicle, s: PackSettings): PackOption | null {
-  const box = fillContainer(part, { l: container.l, w: container.w, h: container.h }, container.tare, container.maxLoad, s);
+  const box = fillContainer(part, { l: container.l, w: container.w, h: container.h }, container.tare, container.maxLoad, s, container.kind !== "crate");
   return box ? evaluateFilled(part, container, box, pallet, vehicle, s) : null;
 }
 
@@ -516,7 +519,7 @@ export function bestCartons(part: PackPart, pallet: PackPallet, vehicle: PackVeh
             const c: PackContainer = {
               id: `fit-${key}-${g.key}`,
               kind: "carton",
-              name: `Made to size ${L}×${W}×${H} · ${g.label}`,
+              name: `Carton ${L}×${W}×${H} · ${g.label}`,
               l: L,
               w: W,
               h: H,
