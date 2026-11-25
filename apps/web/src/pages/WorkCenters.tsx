@@ -8,8 +8,9 @@ import { date, money, num } from "../format.ts";
 
 const KIND: Record<string, string> = { machine: "Machine", labor: "Labor / bench", outside: "Outside process" };
 
-type Form = { code: string; name: string; kind: string; hourlyRate: string; capacityHoursPerDay: string; active: boolean };
-const blank: Form = { code: "", name: "", kind: "machine", hourlyRate: "", capacityHoursPerDay: "8", active: true };
+type Form = { code: string; name: string; kind: string; hourlyRate: string; capacityHoursPerDay: string; atPlannedTime: string; active: boolean };
+const blank: Form = { code: "", name: "", kind: "machine", hourlyRate: "", capacityHoursPerDay: "8", atPlannedTime: "continue", active: true };
+const AT_PLANNED: Record<string, string> = { continue: "Keeps running", stop: "Timer stops", complete: "Step finishes" };
 
 export function WorkCentersPage() {
   const qc = useQueryClient();
@@ -72,7 +73,7 @@ export function WorkCentersPage() {
                 <button
                   key={w.id}
                   type="button"
-                  onClick={() => (save.reset(), setEdit({ id: w.id, form: { code: w.code, name: w.name, kind: w.kind, hourlyRate: String(w.hourlyRate), capacityHoursPerDay: String(w.capacityHoursPerDay), active: w.active } }))}
+                  onClick={() => (save.reset(), setEdit({ id: w.id, form: { code: w.code, name: w.name, kind: w.kind, hourlyRate: String(w.hourlyRate), capacityHoursPerDay: String(w.capacityHoursPerDay), atPlannedTime: w.atPlannedTime ?? "continue", active: w.active } }))}
                   className={cx("flex flex-col rounded-xl bg-panel p-4 text-left shadow-panel ring-1 ring-line/70 transition hover:ring-2 hover:ring-accent", !w.active && "opacity-60")}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -82,6 +83,7 @@ export function WorkCentersPage() {
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
                       <Badge tone={w.kind === "outside" ? "accent" : "muted"}>{KIND[w.kind] ?? w.kind}</Badge>
+                      {w.atPlannedTime && w.atPlannedTime !== "continue" && <Badge tone="accent">At planned time: {AT_PLANNED[w.atPlannedTime]}</Badge>}
                       {!w.active ? <Status value="inactive" /> : running ? <Status value="running" /> : null}
                     </div>
                   </div>
@@ -137,6 +139,15 @@ export function WorkCentersPage() {
               <Field label="Capacity hours per day" error={fields.capacityHoursPerDay}>
                 <Input type="number" step="0.5" min={0} value={edit.form.capacityHoursPerDay} onChange={set("capacityHoursPerDay")} />
               </Field>
+              <div className="sm:col-span-2">
+                <Field label="When the planned time is reached" hint="Finish the step suits timed work such as molding, curing or a machine cycle; the parts are counted good and the next step becomes ready.">
+                  <Select value={edit.form.atPlannedTime} onChange={set("atPlannedTime")}>
+                    <option value="continue">Keep running (the operator stops it)</option>
+                    <option value="stop">Stop the timer</option>
+                    <option value="complete">Finish the step</option>
+                  </Select>
+                </Field>
+              </div>
               <label className="flex items-center gap-2 text-sm sm:col-span-2">
                 <input type="checkbox" checked={edit.form.active} onChange={(e) => setEdit({ ...edit, form: { ...edit.form, active: e.target.checked } })} />
                 Active (can be used on new quotes and jobs)

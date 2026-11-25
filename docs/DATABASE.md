@@ -169,3 +169,8 @@ These came out of `docs/research/competitor-capabilities.md` and change the targ
   `code`, name, inside size (footprint and deck height for pallets), wall, tare, max load or
   payload, pallet max height, price, returnable with trip cost and life in trips, and the
   board grade for cartons.
+
+## Work center timing (migration 0010)
+
+- `work_centers.at_planned_time` — `continue` (default), `stop` or `complete`: what a running
+  timer does when the step's planned time is reached.

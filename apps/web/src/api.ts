@@ -67,6 +67,8 @@ export interface WorkCenter {
   kind: string;
   hourlyRate: number;
   capacityHoursPerDay: number;
+  /** When a timer reaches the planned time: keep running, stop the timer, or finish the step. */
+  atPlannedTime: "continue" | "stop" | "complete";
   active: boolean;
 }
 export interface Item {

@@ -25,13 +25,13 @@ if (existing) {
   const ctx: Ctx = { orgId: s.orgId, userId: s.userId, role: "owner" };
 
   const wc = {
-    saw: await createWorkCenter(db, ctx, { code: "SAW", name: "Band saw", kind: "machine", hourlyRate: 55, capacityHoursPerDay: 8, active: true }),
-    mill: await createWorkCenter(db, ctx, { code: "VMC1", name: "3-axis vertical mill", kind: "machine", hourlyRate: 95, capacityHoursPerDay: 16, active: true }),
-    lathe: await createWorkCenter(db, ctx, { code: "LATHE1", name: "CNC lathe with live tooling", kind: "machine", hourlyRate: 90, capacityHoursPerDay: 16, active: true }),
-    laser: await createWorkCenter(db, ctx, { code: "LASER", name: "Fiber laser 3 kW", kind: "machine", hourlyRate: 150, capacityHoursPerDay: 16, active: true }),
-    brake: await createWorkCenter(db, ctx, { code: "BRAKE", name: "Press brake", kind: "machine", hourlyRate: 85, capacityHoursPerDay: 8, active: true }),
-    deburr: await createWorkCenter(db, ctx, { code: "DEB", name: "Deburr and finish bench", kind: "labor", hourlyRate: 45, capacityHoursPerDay: 8, active: true }),
-    qc: await createWorkCenter(db, ctx, { code: "QC", name: "Final inspection", kind: "labor", hourlyRate: 65, capacityHoursPerDay: 8, active: true }),
+    saw: await createWorkCenter(db, ctx, { code: "SAW", name: "Band saw", kind: "machine", hourlyRate: 55, capacityHoursPerDay: 8, atPlannedTime: "continue", active: true }),
+    mill: await createWorkCenter(db, ctx, { code: "VMC1", name: "3-axis vertical mill", kind: "machine", hourlyRate: 95, capacityHoursPerDay: 16, atPlannedTime: "continue", active: true }),
+    lathe: await createWorkCenter(db, ctx, { code: "LATHE1", name: "CNC lathe with live tooling", kind: "machine", hourlyRate: 90, capacityHoursPerDay: 16, atPlannedTime: "continue", active: true }),
+    laser: await createWorkCenter(db, ctx, { code: "LASER", name: "Fiber laser 3 kW", kind: "machine", hourlyRate: 150, capacityHoursPerDay: 16, atPlannedTime: "continue", active: true }),
+    brake: await createWorkCenter(db, ctx, { code: "BRAKE", name: "Press brake", kind: "machine", hourlyRate: 85, capacityHoursPerDay: 8, atPlannedTime: "continue", active: true }),
+    deburr: await createWorkCenter(db, ctx, { code: "DEB", name: "Deburr and finish bench", kind: "labor", hourlyRate: 45, capacityHoursPerDay: 8, atPlannedTime: "continue", active: true }),
+    qc: await createWorkCenter(db, ctx, { code: "QC", name: "Final inspection", kind: "labor", hourlyRate: 65, capacityHoursPerDay: 8, atPlannedTime: "continue", active: true }),
   };
 
   const base = { revision: "A", uom: "ea", salePrice: 0, active: true, routing: [], bom: [] };

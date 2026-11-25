@@ -103,3 +103,9 @@ adapts.
     press). Each timer costs its own work center's rate; starting a timer only replaces the
     same person's timer on that same operation (setup → run). The operator screen lists the
     person's other running jobs.
+44. **What happens at the planned time is set per work center**: keep running (default),
+    stop the timer, or finish the step. Setup timers stop at the planned setup time; run,
+    labor and machine timers at run hours per piece × job quantity, counting everyone's time
+    on that step. "Finish the step" counts the rest of the job's pieces good and readies the
+    next step. The server checks every 15 seconds and whenever a floor screen loads, and ends
+    the timer at the exact moment the plan ran out.

@@ -69,12 +69,16 @@ export const contactSchema = z.object({
 });
 
 export const WORK_CENTER_KINDS = ["machine", "labor", "outside"] as const;
+/** What a running timer does when its planned time is reached. */
+export const AT_PLANNED_TIME = ["continue", "stop", "complete"] as const;
+export type AtPlannedTime = (typeof AT_PLANNED_TIME)[number];
 export const workCenterSchema = z.object({
   code: text(30).min(1),
   name: text(120).min(1),
   kind: z.enum(WORK_CENTER_KINDS).default("machine"),
   hourlyRate: money,
   capacityHoursPerDay: hours.default(8),
+  atPlannedTime: z.enum(AT_PLANNED_TIME).default("continue"),
   active: z.boolean().default(true),
 });
 

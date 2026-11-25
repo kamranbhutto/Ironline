@@ -37,6 +37,7 @@ const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
 /** Work centers with how many operations are waiting or running at each. */
 export async function floorWorkCenters(db: Db, ctx: Ctx) {
+  await autoFinish(db, ctx.orgId);
   return db
     .select({
       id: workCenters.id,
@@ -54,6 +55,7 @@ export async function floorWorkCenters(db: Db, ctx: Ctx) {
 
 /** Operations an operator can work on at a work center: ready or running, soonest due first. */
 export async function queue(db: Db, ctx: Ctx, workCenterId: string) {
+  await autoFinish(db, ctx.orgId);
   return db
     .select({
       id: jobOperations.id,
@@ -111,6 +113,7 @@ export async function refreshJobActual(tx: Tx, jobId: string) {
 
 /** Everything the operator screen needs for one operation. */
 export async function operationView(db: Db, ctx: Ctx, opId: string) {
+  await autoFinish(db, ctx.orgId);
   const { op, job } = await loadOp(db, ctx, opId);
   const [wc] = op.workCenterId ? await db.select().from(workCenters).where(eq(workCenters.id, op.workCenterId)) : [];
   const [entries, materials, allOps, partRow, custRow] = await Promise.all([
@@ -151,7 +154,7 @@ export async function operationView(db: Db, ctx: Ctx, opId: string) {
   const open = entries.find((e) => !e.endedAt && e.userId === ctx.userId) ?? null;
   return {
     operation: op,
-    workCenter: wc ? { id: wc.id, code: wc.code, name: wc.name } : null,
+    workCenter: wc ? { id: wc.id, code: wc.code, name: wc.name, atPlannedTime: wc.atPlannedTime } : null,
     job: { id: job.id, number: job.number, description: job.description, quantity: job.quantity, dueDate: job.dueDate, status: job.status, notes: job.notes },
     part: partRow[0] ?? null,
     customerName: custRow[0]?.name ?? null,
@@ -186,10 +189,10 @@ export async function operationView(db: Db, ctx: Ctx, opId: string) {
   };
 }
 
-async function closeOpen(tx: Tx, ctx: Ctx, where: ReturnType<typeof and>, extra: Partial<z.infer<typeof stopSchema>> = {}) {
+async function closeOpen(tx: Tx, ctx: Ctx, where: ReturnType<typeof and>, extra: Partial<z.infer<typeof stopSchema>> = {}, endAt?: Date) {
   const open = await tx.select().from(laborEntries).where(and(eq(laborEntries.orgId, ctx.orgId), isNull(laborEntries.endedAt), where));
   for (const e of open) {
-    const end = new Date();
+    const end = endAt ?? new Date();
     const hours = (end.getTime() - e.startedAt.getTime()) / 3_600_000;
     await tx
       .update(laborEntries)
@@ -250,7 +253,12 @@ export async function stopTimer(db: Db, ctx: Ctx, opId: string, input: z.infer<t
 
 export async function completeOperation(db: Db, ctx: Ctx, opId: string, input: z.infer<typeof stopSchema>) {
   canWork(ctx);
-  return db.transaction(async (tx) => {
+  return db.transaction((tx) => finishStep(tx, ctx, opId, input));
+}
+
+/** Close the step's timers, mark it done, make the next step ready, and finish the job after the last step. */
+async function finishStep(tx: Tx, ctx: Ctx, opId: string, input: z.infer<typeof stopSchema>) {
+  {
     const { op, job } = await loadOp(tx, ctx, opId);
     if (op.status === "done") throw conflict("This operation is already complete");
     if (!["released", "in_progress"].includes(job.status)) throw conflict("Release the job before completing operations");
@@ -277,7 +285,52 @@ export async function completeOperation(db: Db, ctx: Ctx, opId: string, input: z
     await logEvent(tx, ctx, "job", job.id, "operation_done", { operation: op.sequence, good: done!.quantityGood, scrap: done!.quantityScrap, next: next?.sequence });
     if (allDone) await onJobComplete(tx, ctx, job.id);
     return { nextOperationId: next?.id ?? null, jobComplete: allDone };
-  });
+  }
+}
+
+/**
+ * Timers that have reached their planned time at work centers set to stop or finish there.
+ * Setup timers stop at the planned setup time. Run, labor and machine timers stop at the planned
+ * run time (run hours per piece × job quantity, all people together); at "complete" work centers
+ * the step is then finished with the rest of the job's pieces counted good. The timer ends at the
+ * exact moment the plan ran out, so it is right even when checked later. Returns how many ended.
+ */
+export async function autoFinish(db: Db, orgId?: string) {
+  const rows = await db
+    .select({ entryId: laborEntries.id, opId: jobOperations.id, kind: laborEntries.kind, mode: workCenters.atPlannedTime })
+    .from(laborEntries)
+    .innerJoin(jobOperations, eq(jobOperations.id, laborEntries.jobOperationId))
+    .innerJoin(workCenters, eq(workCenters.id, jobOperations.workCenterId))
+    .where(and(isNull(laborEntries.endedAt), inArray(workCenters.atPlannedTime, ["stop", "complete"]), orgId ? eq(laborEntries.orgId, orgId) : undefined));
+  let ended = 0;
+  for (const r of rows) {
+    await db.transaction(async (tx) => {
+      const [me] = await tx.select().from(laborEntries).where(and(eq(laborEntries.id, r.entryId), isNull(laborEntries.endedAt)));
+      if (!me) return;
+      const ctx: Ctx = { orgId: me.orgId, userId: me.userId, role: "operator" };
+      const { op, job } = await loadOp(tx, ctx, r.opId);
+      const setup = r.kind === "setup";
+      const planned = (setup ? op.setupHours : op.runHoursPerUnit * job.quantity) * 3600;
+      if (!(planned > 0)) return;
+      const all = await tx.select().from(laborEntries).where(and(eq(laborEntries.jobOperationId, op.id), inArray(laborEntries.kind, setup ? ["setup"] : ["run", "labor"])));
+      const now = Date.now();
+      const used = (e: typeof me) => ((e.endedAt ? e.endedAt.getTime() : now) - e.startedAt.getTime()) / 1000;
+      const before = all.filter((e) => e.id !== me.id).reduce((a, e) => a + used(e), 0);
+      if (before + used(me) < planned) return;
+      const endAt = new Date(Math.min(now, me.startedAt.getTime() + Math.max(0, planned - before) * 1000));
+      const finish = r.mode === "complete" && !setup && ["released", "in_progress"].includes(job.status) && op.status !== "done";
+      const remaining = Math.max(0, job.quantity - op.quantityGood);
+      await closeOpen(tx, ctx, eq(laborEntries.id, me.id), finish ? { quantityGood: remaining } : {}, endAt);
+      ended++;
+      if (finish) {
+        await finishStep(tx, ctx, op.id, { quantityGood: 0, quantityScrap: 0 });
+        await logEvent(tx, ctx, "job", job.id, "operation_auto_done", { operation: op.sequence, good: remaining });
+      } else {
+        await logEvent(tx, ctx, "job", job.id, "timer_auto_stopped", { operation: op.sequence, kind: r.kind });
+      }
+    });
+  }
+  return ended;
 }
 
 /** Count finished or scrapped parts while the timer keeps running. */
@@ -346,6 +399,7 @@ function finishDate(days: number) {
  * (due date, then priority), remaining hours, and a finish date from daily capacity.
  */
 export async function board(db: Db, ctx: Ctx) {
+  await autoFinish(db, ctx.orgId);
   const wcs = await db.select().from(workCenters).where(and(eq(workCenters.orgId, ctx.orgId), eq(workCenters.active, true))).orderBy(asc(workCenters.code));
   const rows = await db
     .select({

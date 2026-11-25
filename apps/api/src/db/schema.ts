@@ -183,6 +183,8 @@ export const workCenters = pgTable(
     kind: text("kind").notNull().default("machine"),
     hourlyRate: money("hourly_rate").notNull().default(0),
     capacityHoursPerDay: hrs("capacity_hours_per_day").notNull().default(8),
+    /** When a timer reaches the planned time: keep running, stop the timer, or finish the step. */
+    atPlannedTime: text("at_planned_time").notNull().default("continue"),
     active: boolean("active").notNull().default(true),
     createdAt: created(),
     updatedAt: updated(),
@@ -190,6 +192,7 @@ export const workCenters = pgTable(
   (t) => [
     uniqueIndex("work_centers_org_code").on(t.orgId, t.code),
     check("work_centers_kind", inList("kind", ["machine", "labor", "outside"])),
+    check("work_centers_at_planned_time", inList("at_planned_time", ["continue", "stop", "complete"])),
   ],
 );
 

@@ -1,5 +1,6 @@
 import { buildApp } from "./app.ts";
 import { initPreviews } from "./services/files.ts";
+import { autoFinish } from "./services/floor.ts";
 import { createDb } from "./db/client.ts";
 import { runMigrations } from "./db/migrate.ts";
 
@@ -10,4 +11,8 @@ const app = buildApp(db, { logger: true });
 const previews = initPreviews(db, (m) => app.log.info(m));
 await previews.resume();
 const port = Number(process.env.PORT ?? 4100);
+// Timers at work centers set to stop or finish at the planned time end on time, even with no screen open.
+setInterval(() => {
+  autoFinish(db).catch((e) => app.log.error(e, "auto-finish of timers failed"));
+}, 15_000).unref();
 await app.listen({ host: process.env.HOST ?? "127.0.0.1", port });

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { setupApp, shop } from "./helpers.ts";
 
@@ -29,6 +30,72 @@ async function releasedJob(call: Awaited<ReturnType<typeof shop>>["call"]) {
 }
 
 describe("shop floor", () => {
+  it("stops a timer or finishes the step at the planned time when the work center says so", async () => {
+    const { call } = await shop(env.app);
+    const inj = await call("POST", "/work-centers", { code: "INJ", name: "Injection", hourlyRate: 120, atPlannedTime: "complete" });
+    expect(inj.body.atPlannedTime).toBe("complete");
+    const oven = await call("POST", "/work-centers", { code: "OVEN", name: "Cure oven", hourlyRate: 30, atPlannedTime: "stop" });
+    const pack = await call("POST", "/work-centers", { code: "PACK", name: "Pack", hourlyRate: 40 });
+    const cust = await call("POST", "/customers", { name: "Timed Co" });
+    // 5 pieces × 0.1 h = 30 min planned on INJ (plus 6 min setup); 20 min planned in the oven.
+    const q = await call("POST", "/quotes", { customerId: cust.body.id, lines: [{ description: "Clip", quantity: 5, operations: [
+      { workCenterId: inj.body.id, setupHours: 0.1, runHoursPerUnit: 0.1 },
+      { workCenterId: oven.body.id, runHoursPerUnit: 0.0666667 },
+      { workCenterId: pack.body.id, runHoursPerUnit: 0.01 },
+    ] }] });
+    const o = await call("POST", `/quotes/${q.body.id}/convert`, {});
+    const so = await call("GET", `/sales-orders/${o.body.id}`);
+    const jobId = so.body.lines[0].jobs[0].id;
+    await call("POST", `/jobs/${jobId}/status`, { status: "released" });
+    const ops = (await call("GET", `/jobs/${jobId}`)).body.operations;
+    const backdate = (opId: string, minutes: number) =>
+      env.db.execute(sql`update labor_entries set started_at = now() - make_interval(mins => ${minutes}) where job_operation_id = ${opId} and ended_at is null`);
+
+    // Setup on a "finish" work center only stops the setup timer at the planned 6 minutes.
+    await call("POST", `/floor/operations/${ops[0].id}/start`, { kind: "setup" });
+    await backdate(ops[0].id, 9);
+    let v = (await call("GET", `/floor/operations/${ops[0].id}`)).body;
+    expect(v.openEntry).toBeNull();
+    expect(v.operation.status).toBe("ready");
+    expect(v.actual.setupSeconds).toBe(360); // ended at the plan, not 9 minutes
+
+    // Running under plan keeps going.
+    await call("POST", `/floor/operations/${ops[0].id}/start`, { kind: "run" });
+    await backdate(ops[0].id, 10);
+    v = (await call("GET", `/floor/operations/${ops[0].id}`)).body;
+    expect(v.openEntry).not.toBeNull();
+
+    // Past the 30 minutes: the step finishes, all 5 good, the next step is ready.
+    await backdate(ops[0].id, 45);
+    v = (await call("GET", `/floor/operations/${ops[0].id}`)).body;
+    expect(v.openEntry).toBeNull();
+    expect(v.operation).toMatchObject({ status: "done", quantityGood: 5 });
+    expect(v.actual.runSeconds).toBe(1800);
+    let job = (await call("GET", `/jobs/${jobId}`)).body;
+    expect(job.operations[1].status).toBe("ready");
+    expect(job.log.some((e: { action: string }) => e.action === "operation_auto_done")).toBe(true);
+    // Cost is the planned 30 min + 6 min setup at 120/h.
+    expect(job.operations[0].actualCost).toBeCloseTo(72, 1);
+
+    // A "stop" work center stops the timer but leaves the step open.
+    await call("POST", `/floor/operations/${ops[1].id}/start`, { kind: "run" });
+    await backdate(ops[1].id, 30);
+    await call("GET", "/floor/board");
+    v = (await call("GET", `/floor/operations/${ops[1].id}`)).body;
+    expect(v.openEntry).toBeNull();
+    expect(v.operation.status).toBe("ready");
+    expect(Math.round(v.actual.runSeconds / 60)).toBe(20);
+
+    // A "keep running" work center never stops by itself.
+    await call("POST", `/floor/operations/${ops[1].id}/complete`, { quantityGood: 5 });
+    await call("POST", `/floor/operations/${ops[2].id}/start`, { kind: "run" });
+    await backdate(ops[2].id, 120);
+    v = (await call("GET", `/floor/operations/${ops[2].id}`)).body;
+    expect(v.openEntry).not.toBeNull();
+    job = (await call("GET", `/jobs/${jobId}`)).body;
+    expect(job.status).toBe("in_progress");
+  });
+
   it("lets one person run jobs on two work centers at the same time", async () => {
     const { call } = await shop(env.app);
     const cut = await call("POST", "/work-centers", { code: "CUT", name: "Cutter", hourlyRate: 60 });

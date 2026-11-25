@@ -56,7 +56,7 @@ type OpView = {
     quantityScrap: number;
     quantityRework: number;
   };
-  workCenter: { id: string; code: string; name: string } | null;
+  workCenter: { id: string; code: string; name: string; atPlannedTime?: "continue" | "stop" | "complete" } | null;
   job: { id: string; number: string; description: string; quantity: number; dueDate: string | null; status: string; notes: string | null };
   part: { partNumber: string; revision: string; name: string } | null;
   customerName: string | null;
@@ -166,6 +166,23 @@ export function OperatorPage() {
   const d = v.data;
   const fileList = files.data ?? [];
   const main = fileList.find((f) => f.id === fileId) ?? fileList.find((f) => f.kind === "cad" || f.kind === "mesh") ?? fileList[0];
+  // At work centers set to stop or finish at the planned time, ask the server to do it as soon as
+  // the plan runs out (it also checks every few seconds on its own, with no screen open).
+  const atPlanned = v.data?.workCenter?.atPlannedTime ?? "continue";
+  const lastAuto = useRef(0);
+  useEffect(() => {
+    const d = v.data;
+    if (!d?.openEntry || atPlanned === "continue") return;
+    const drift = Math.max(0, (now - v.dataUpdatedAt) / 1000);
+    const setup = d.openEntry.kind === "setup";
+    const used = (setup ? d.actual.setupSeconds : d.actual.runSeconds) + drift;
+    const planned = setup ? d.estimate.setupSeconds : d.estimate.runSeconds;
+    if (planned > 0 && used >= planned && now - lastAuto.current > 4000) {
+      lastAuto.current = now;
+      refresh();
+    }
+  }, [now]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (v.error) return <div className="p-6"><ErrorNote error={v.error} /></div>;
   if (!d) return <Loading />;
 
@@ -178,7 +195,7 @@ export function OperatorPage() {
   // Timers never stop by themselves (they record real time), but the operator is told when
   // the running one passes its planned time and can pause it or carry on.
   const plannedFor = d.openEntry ? (d.openEntry.kind === "setup" ? { label: "setup", used: setupSecs, planned: d.estimate.setupSeconds } : { label: "run", used: laborSecs + machineSecs, planned: d.estimate.runSeconds }) : null;
-  const overPlan = plannedFor && plannedFor.planned > 0 && plannedFor.used > plannedFor.planned && keepGoing !== d.openEntry!.id ? plannedFor : null;
+  const overPlan = atPlanned === "continue" && plannedFor && plannedFor.planned > 0 && plannedFor.used > plannedFor.planned && keepGoing !== d.openEntry!.id ? plannedFor : null;
   const canWork = ["released", "in_progress"].includes(d.job.status) && ["ready", "running"].includes(d.operation.status);
   const hasWork = d.actual.setupSeconds + d.actual.runSeconds > 0 || d.operation.quantityGood > 0 || running;
   const busy = start.isPending || stop.isPending || count.isPending;
@@ -297,6 +314,11 @@ export function OperatorPage() {
           )}
         </button>
         {running && <div className="num -mt-2 text-center text-sm text-muted">{clock((now - new Date(d.openEntry!.startedAt).getTime()) / 1000)} this session</div>}
+        {running && atPlanned !== "continue" && (
+          <p className="-mt-1 rounded-lg bg-accent-soft px-2 py-1 text-center text-xs text-accent">
+            {atPlanned === "complete" && d.openEntry!.kind !== "setup" ? "This step finishes by itself at the planned time" : "This timer stops by itself at the planned time"}
+          </p>
+        )}
         {d.othersRunning.length > 0 && <p className="text-center text-xs text-muted">Also working: {d.othersRunning.join(", ")}</p>}
         {d.myOtherRunning.length > 0 && (
           <div className="rounded-xl bg-ok-soft px-2.5 py-2 text-xs">

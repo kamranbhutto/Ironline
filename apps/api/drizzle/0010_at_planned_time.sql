@@ -1,0 +1,2 @@
+ALTER TABLE "work_centers" ADD COLUMN "at_planned_time" text DEFAULT 'continue' NOT NULL;--> statement-breakpoint
+ALTER TABLE "work_centers" ADD CONSTRAINT "work_centers_at_planned_time" CHECK (at_planned_time in ('continue', 'stop', 'complete'));
