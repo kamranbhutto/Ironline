@@ -404,7 +404,7 @@ export const salesOrders = pgTable(
     index("sales_orders_org_status").on(t.orgId, t.status),
     check(
       "sales_orders_status",
-      inList("status", ["draft", "confirmed", "in_production", "shipped", "closed", "cancelled"]),
+      inList("status", ["draft", "confirmed", "in_production", "ready", "shipped", "closed", "cancelled"]),
     ),
   ],
 );

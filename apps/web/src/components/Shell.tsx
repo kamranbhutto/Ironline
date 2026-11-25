@@ -71,7 +71,7 @@ const GROUPS: NavGroup[] = [
       { to: "/inventory", label: "Inventory", icon: Boxes },
       { to: "/purchasing", label: "Purchasing", icon: Receipt },
       { to: "/packaging/studio", label: "Packaging", icon: PackageCheck },
-      { to: "/soon/shipping", label: "Shipping", icon: Truck, soon: true },
+      { to: "/shipping", label: "Shipping", icon: Truck },
     ],
   },
   {

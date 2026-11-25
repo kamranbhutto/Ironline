@@ -50,6 +50,7 @@ function App() {
         <Route path="/quotes/new" element={<QuoteEditorPage />} />
         <Route path="/quotes/:id" element={<QuoteEditorPage />} />
         <Route path="/sales-orders" element={<SalesOrdersPage />} />
+        <Route path="/shipping" element={<SalesOrdersPage shipping key="shipping" />} />
         <Route path="/sales-orders/:id" element={<SalesOrderPage />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/jobs/:id" element={<JobDetailPage />} />

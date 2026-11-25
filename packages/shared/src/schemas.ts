@@ -159,6 +159,7 @@ export const SALES_ORDER_STATUSES = [
   "draft",
   "confirmed",
   "in_production",
+  "ready",
   "shipped",
   "closed",
   "cancelled",

@@ -22,6 +22,7 @@ import { badRequest, conflict, EDITORS, notFound, requireRole, type Ctx } from "
 import { like, logEvent, nextNumber } from "./common.ts";
 import { copyPlanToJob } from "./quality.ts";
 import { cascadeStatus, childrenOf, onJobComplete, openChildren, spawnChildren } from "./subjobs.ts";
+import { refreshOrderForJob } from "./salesOrders.ts";
 
 /**
  * Create a job for one sales-order line. Operations and materials come from the quote
@@ -284,6 +285,7 @@ export async function setJobStatus(db: Db, ctx: Ctx, id: string, status: JobStat
     await tx.update(jobs).set({ status, updatedAt: new Date() }).where(eq(jobs.id, id));
     await logEvent(tx, ctx, "job", id, "status", { from, to: status });
     if (status === "complete") await onJobComplete(tx, ctx, id);
+    await refreshOrderForJob(tx, ctx, id);
     return getJob(tx, ctx, id);
   });
 }

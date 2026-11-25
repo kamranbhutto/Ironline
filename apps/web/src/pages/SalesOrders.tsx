@@ -1,24 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, qs, type SalesOrderDetail, type SalesOrderSummary } from "../api.ts";
-import { Box } from "lucide-react";
+import { Box, Printer, Truck } from "lucide-react";
 import { FilesPanel, type FileRow } from "../components/Files.tsx";
 import { useThumb } from "../thumbs.ts";
-import { Badge, Button, Card, cx, DetailTitle, ErrorNote, InsetField, ListBar, Loading, MetricCard, PageHeader, PillTabs, R, recordCard, SearchBox, StageTimeline, Status, TabPanel, Table, Td, ViewTabs } from "../components/ui.tsx";
+import { Badge, Button, Card, cx, DetailTitle, ErrorNote, InsetField, ListBar, Loading, MetricCard, Modal, MoreMenu, PageHeader, PillTabs, R, recordCard, SearchBox, StageTimeline, Status, TabPanel, Table, Td, ViewTabs } from "../components/ui.tsx";
 import { date, isPast, label, money, num } from "../format.ts";
 
-export function SalesOrdersPage() {
+/** Sales orders; the Shipping menu opens the same list on the orders ready to ship. */
+export function SalesOrdersPage({ shipping = false }: { shipping?: boolean }) {
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState("open");
+  const [status, setStatus] = useState(shipping ? "ready" : "open");
   const nav = useNavigate();
   const list = useQuery({ queryKey: ["sales-orders", status, q], queryFn: () => api<SalesOrderSummary[]>(`/sales-orders${qs({ q, status })}`) });
   return (
     <>
-      <PageHeader title="Sales orders" sub="Confirmed customer orders. Create them from won quotes." />
+      <PageHeader title={shipping ? "Shipping" : "Sales orders"} sub={shipping ? "Orders whose jobs are finished, ready to ship. Open one and click Ship." : "Confirmed customer orders. Create them from won quotes."} />
       <Card pad={false}>
         <ListBar>
-          <ViewTabs views={[{ key: "open", label: "Open" }, { key: "confirmed", label: "Confirmed" }, { key: "in_production", label: "In production" }, { key: "shipped", label: "Shipped" }, { key: "closed", label: "Closed" }, { key: "", label: "All" }]} value={status} onChange={setStatus} />
+          <ViewTabs views={[{ key: "open", label: "Open" }, { key: "confirmed", label: "Confirmed" }, { key: "in_production", label: "In production" }, { key: "ready", label: "Ready to ship" }, { key: "shipped", label: "Shipped" }, { key: "closed", label: "Closed" }, { key: "", label: "All" }]} value={status} onChange={setStatus} />
           <div className="ml-auto w-full sm:w-72">
             <SearchBox value={q} onChange={setQ} placeholder="Search order, customer or PO" />
           </div>
@@ -33,7 +34,7 @@ export function SalesOrdersPage() {
                 <Td>{date(o.orderDate)}</Td>
                 <Td className={isPast(o.dueDate) && o.status !== "shipped" && o.status !== "closed" ? "text-bad" : ""}>{date(o.dueDate)}</Td>
                 <Td right>{money(o.totalPrice)}</Td>
-                <Td><Status value={o.status} /></Td>
+                <Td><Status value={o.status} text={orderStatusText(o.status)} /></Td>
               </tr>
             ))}
           </Table>
@@ -49,6 +50,12 @@ export function SalesOrderPage() {
   const [tab, setTab] = useState<"lines" | "files" | "log">("lines");
   const [fileCount, setFileCount] = useState<number | undefined>();
   const so = useQuery({ queryKey: ["sales-order", id], queryFn: () => api<SalesOrderDetail>(`/sales-orders/${id}`) });
+  const [shipOpen, setShipOpen] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const setStatus = useMutation({
+    mutationFn: (status: "closed" | "cancelled") => api<SalesOrderDetail>(`/sales-orders/${id}/status`, "POST", { status }),
+    onSuccess: (o) => (qc.setQueryData(["sales-order", id], o), qc.invalidateQueries({ queryKey: ["sales-orders"] }), qc.invalidateQueries({ queryKey: ["jobs"] })),
+  });
   const makeJob = useMutation({
     mutationFn: (lineId: string) => api(`/sales-order-lines/${lineId}/jobs`, "POST"),
     onSuccess: () => (qc.invalidateQueries({ queryKey: ["sales-order", id] }), qc.invalidateQueries({ queryKey: ["jobs"] })),
@@ -58,7 +65,7 @@ export function SalesOrderPage() {
   // The detail endpoint has no order-level due date: it is the earliest line due date.
   const due = so.data.dueDate ?? so.data.lines.map((l) => l.dueDate).filter((x): x is string => !!x).sort()[0] ?? null;
   const d = { ...so.data, dueDate: due };
-  const open = d.status === "confirmed" || d.status === "in_production";
+  const open = d.status === "confirmed" || d.status === "in_production" || d.status === "ready";
   const late = open && isPast(d.dueDate);
   const jobs = d.lines.flatMap((l) => l.jobs);
   const jobsDone = jobs.filter((j) => j.status === "complete" || j.status === "closed").length;
@@ -68,13 +75,24 @@ export function SalesOrderPage() {
   const noJob = d.lines.filter((l) => !l.jobs.length).length;
   const daysLeft = d.dueDate ? Math.round((new Date(`${d.dueDate}T00:00:00`).getTime() - new Date(new Date().toDateString()).getTime()) / 86_400_000) : null;
   const dates: Record<string, string | undefined> = { confirmed: date(d.orderDate) };
+  // Deliveries, newest first, from the order's history.
+  const shipments = d.log.filter((e) => e.entity === "sales_order" && e.action === "shipped");
+  for (const e of d.log) if (e.entity === "sales_order" && e.action === "status" && typeof e.data.to === "string" && !dates[e.data.to]) dates[e.data.to] = date(e.createdAt);
 
   return (
     <>
       <DetailTitle
         parent={{ to: "/sales-orders", label: "Sales orders" }}
         title={d.number}
-        badge={late ? <Status value="late" /> : undefined}
+        badge={late ? <Status value="late" /> : <Status value={d.status} text={orderStatusText(d.status)} />}
+        actions={
+          <>
+            {open && ordered > shipped && <Button variant="primary" onClick={() => setShipOpen(true)}><Truck className="h-4 w-4" /> Ship</Button>}
+            {d.status === "shipped" && <Button variant="primary" onClick={() => setStatus.mutate("closed")} disabled={setStatus.isPending}>Close order</Button>}
+            {shipments.length > 0 && <Button onClick={() => printSlip(d, shipments[0]!)}><Printer className="h-4 w-4" /> Packing slip</Button>}
+            {open && shipped === 0 && <MoreMenu items={[{ label: "Cancel order", danger: true, onClick: () => setConfirmCancel(true) }]} />}
+          </>
+        }
         sub={
           <>
             {d.customerName}
@@ -83,7 +101,21 @@ export function SalesOrderPage() {
           </>
         }
       />
-      <ErrorNote error={makeJob.error} />
+      <ErrorNote error={makeJob.error ?? setStatus.error} />
+      {d.status === "ready" && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl bg-ok-soft px-4 py-3 text-sm text-ok ring-1 ring-ok/30">
+          <Truck className="h-4 w-4" /> <span className="text-ink">Every job on this order is finished. It is ready to ship.</span>
+        </div>
+      )}
+      <ShipDialog open={shipOpen} order={d} onClose={() => setShipOpen(false)} />
+      <Modal open={confirmCancel} title={`Cancel ${d.number}?`} onClose={() => setConfirmCancel(false)}>
+        <p className="text-sm">The order is cancelled, and its jobs that have not started are cancelled too. This cannot be undone.</p>
+        <ErrorNote error={setStatus.error} />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button onClick={() => setConfirmCancel(false)}>Keep the order</Button>
+          <Button variant="primary" className="bg-bad" onClick={() => setStatus.mutate("cancelled", { onSuccess: () => setConfirmCancel(false) })} disabled={setStatus.isPending}>Cancel order</Button>
+        </div>
+      </Modal>
 
       <div className="mb-5 px-1">
         {d.status === "cancelled" ? (
@@ -118,7 +150,7 @@ export function SalesOrderPage() {
           <div className="num mt-1 text-[28px] font-semibold leading-tight">{d.number}</div>
           <div className="mt-4 space-y-3">
             <InsetField label="Status" tone={late ? "bad" : open ? "ok" : undefined}>
-              <div className="text-[17px] font-medium">{label(d.status)}</div>
+              <div className="text-[17px] font-medium">{orderStatusText(d.status)}</div>
             </InsetField>
             <div className="grid grid-cols-2 gap-3">
               <InsetField label="Customer PO"><div className="text-[15px]">{d.customerPo ?? "—"}</div></InsetField>
@@ -189,6 +221,7 @@ export function SalesOrderPage() {
 const SO_STAGES = [
   { key: "confirmed", label: "Confirmed" },
   { key: "in_production", label: "In production" },
+  { key: "ready", label: "Ready to ship" },
   { key: "shipped", label: "Shipped" },
   { key: "closed", label: "Closed" },
 ];
@@ -197,6 +230,8 @@ function logText(e: SalesOrderDetail["log"][number]) {
   const d = e.data;
   if (e.entity === "job") return e.action === "created" ? `Job ${e.jobNumber} created` : `Job ${e.jobNumber}: ${label(String(d.from))} → ${label(String(d.to))}`;
   if (e.action === "created") return d.fromQuote ? `Order created from quote ${d.fromQuote}` : "Order created";
+  if (e.action === "shipped") return `Shipped ${(d.lines as { lineNo: number; quantity: number }[]).map((l) => `${num(l.quantity, 4)} on line ${l.lineNo}`).join(", ")}${d.note ? ` (${d.note})` : ""}`;
+  if (e.action === "status") return d.auto ? `${orderStatusText(String(d.to))} (all jobs finished)` : `Order ${orderStatusText(String(d.from)).toLowerCase()} → ${orderStatusText(String(d.to)).toLowerCase()}`;
   if (e.action === "file_added") return `Added file ${d.file}`;
   if (e.action === "file_removed") return `Removed file ${d.file}`;
   return label(e.action);
@@ -261,4 +296,84 @@ function OrderLine({ l, onMakeJob, busy }: { l: SalesOrderDetail["lines"][number
       </div>
     </div>
   );
+}
+
+/** An order's status in words ("ready" means ready to ship). */
+export const orderStatusText = (s: string) => (s === "ready" ? "Ready to ship" : label(s));
+
+/** Record a delivery: how many of each line go out now (what is left, by default). */
+function ShipDialog({ open, order, onClose }: { open: boolean; order: SalesOrderDetail; onClose: () => void }) {
+  const qc = useQueryClient();
+  const left = (l: SalesOrderDetail["lines"][number]) => Math.max(0, Math.round((l.quantity - l.quantityShipped) * 10000) / 10000);
+  const [qty, setQty] = useState<Record<string, string>>({});
+  const [note, setNote] = useState("");
+  useEffect(() => {
+    if (open) (setQty(Object.fromEntries(order.lines.map((l) => [l.id, String(left(l))]))), setNote(""));
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ship = useMutation({
+    mutationFn: () =>
+      api<SalesOrderDetail>(`/sales-orders/${order.id}/ship`, "POST", {
+        lines: order.lines.map((l) => ({ lineId: l.id, quantity: Number(qty[l.id] || 0) })).filter((x) => x.quantity > 0),
+        note: note.trim() || null,
+      }),
+    onSuccess: (o) => {
+      qc.setQueryData(["sales-order", order.id], o);
+      qc.invalidateQueries({ queryKey: ["sales-orders"] });
+      const last = o.log.find((e) => e.entity === "sales_order" && e.action === "shipped");
+      if (last) printSlip(o, last);
+      onClose();
+    },
+  });
+  const any = order.lines.some((l) => Number(qty[l.id] || 0) > 0);
+  return (
+    <Modal open={open} title={`Ship ${order.number}`} onClose={onClose}>
+      <form className="space-y-3" onSubmit={(e) => (e.preventDefault(), ship.mutate())}>
+        <p className="text-sm text-muted">Enter how many of each line go out now. A packing slip opens to print when you ship.</p>
+        <Table head={["Line", R("Ordered"), R("Shipped"), R("Ship now")]}>
+          {order.lines.map((l) => (
+            <tr key={l.id}>
+              <Td><span className="font-medium">{l.partNumber ?? `Line ${l.lineNo}`}</span><div className="max-w-56 truncate text-xs text-muted">{l.description}</div></Td>
+              <Td right>{num(l.quantity, 4)}</Td>
+              <Td right>{num(l.quantityShipped, 4)}</Td>
+              <Td right>
+                <input type="number" min={0} max={left(l)} step="any" aria-label={`Ship now, line ${l.lineNo}`} value={qty[l.id] ?? ""} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} disabled={left(l) <= 0} className="num w-24 rounded-md bg-panel-2 px-2 py-1 text-right ring-1 ring-line" />
+              </Td>
+            </tr>
+          ))}
+        </Table>
+        <label className="block text-sm">
+          <span className="mb-1 block text-[13px] font-medium text-muted">Note (carrier, tracking number…)</span>
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} className="w-full rounded-lg bg-panel-2 px-3 py-2 ring-1 ring-line" />
+        </label>
+        <ErrorNote error={ship.error} />
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={!any || ship.isPending}><Truck className="h-4 w-4" /> {ship.isPending ? "Shipping…" : "Ship"}</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/** A printable packing slip for one delivery. */
+function printSlip(o: SalesOrderDetail, shipment: SalesOrderDetail["log"][number]) {
+  const w = window.open("", "_blank", "width=900,height=900");
+  if (!w) return;
+  const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+  const sent = (shipment.data.lines as { lineNo: number; quantity: number }[]) ?? [];
+  const rows = sent
+    .map((s) => {
+      const l = o.lines.find((x) => x.lineNo === s.lineNo);
+      return `<tr><td>${s.lineNo}</td><td>${esc(l?.partNumber ?? "")}${l?.revision ? ` rev ${esc(l.revision)}` : ""}</td><td>${esc(l?.description ?? "")}</td><td class="r">${esc(num(l?.quantity ?? 0, 4))}</td><td class="r"><b>${esc(num(s.quantity, 4))}</b></td><td class="r">${esc(num(Math.max(0, (l?.quantity ?? 0) - (l?.quantityShipped ?? 0)), 4))}</td></tr>`;
+    })
+    .join("");
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Packing slip ${esc(o.number)}</title>
+<style>@page{size:A4;margin:14mm}body{font:12px system-ui,sans-serif;color:#111}h1{font-size:22px;margin:0}.m{color:#555}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border-bottom:1px solid #ccc;padding:6px;text-align:left}th{font-size:11px;color:#555}.r{text-align:right}.g{display:flex;justify-content:space-between;gap:24px;margin-top:14px}.sig{margin-top:48px;display:flex;gap:40px}.sig div{flex:1;border-top:1px solid #999;padding-top:4px;color:#555}</style></head><body>
+<h1>Packing slip</h1><div class="m">Order ${esc(o.number)}${o.customerPo ? ` · Your PO ${esc(o.customerPo)}` : ""} · Shipped ${esc(new Date(shipment.createdAt).toLocaleDateString())}</div>
+<div class="g"><div><b>Ship to</b><br>${esc(o.customerName)}</div><div>${shipment.data.note ? `<b>Note</b><br>${esc(shipment.data.note)}` : ""}</div></div>
+<table><thead><tr><th>#</th><th>Part</th><th>Description</th><th class="r">Ordered</th><th class="r">This delivery</th><th class="r">Still to come</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="sig"><div>Packed by</div><div>Received by</div></div></body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 300);
 }

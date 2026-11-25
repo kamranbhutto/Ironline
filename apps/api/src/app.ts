@@ -42,6 +42,31 @@ declare module "fastify" {
 
 const parse = <T>(schema: ZodType<T>, value: unknown): T => schema.parse(value ?? {});
 const idParam = z.object({ id: z.uuid() });
+
+/** A validation problem in words a shop user understands (the library's own wording is technical). */
+function plainMessage(issue: ZodError["issues"][number]): string {
+  const i = issue as typeof issue & { origin?: string; minimum?: number | bigint; maximum?: number | bigint; inclusive?: boolean; expected?: string; format?: string; input?: unknown };
+  switch (i.code) {
+    case "too_small":
+      if (i.origin === "string") return Number(i.minimum) <= 1 ? "Required" : `At least ${i.minimum} characters`;
+      if (i.origin === "array" || i.origin === "set") return Number(i.minimum) <= 1 ? "Add at least one" : `Add at least ${i.minimum}`;
+      return i.inclusive === false ? `Must be more than ${i.minimum}` : `Must be at least ${i.minimum}`;
+    case "too_big":
+      if (i.origin === "string") return `At most ${i.maximum} characters`;
+      if (i.origin === "array" || i.origin === "set") return `At most ${i.maximum} entries`;
+      return i.inclusive === false ? `Must be less than ${i.maximum}` : `Must be at most ${i.maximum}`;
+    case "invalid_type":
+      if (i.input === undefined || i.input === null) return "Required";
+      return i.expected === "number" ? "Enter a number" : i.expected === "boolean" ? "Choose yes or no" : "Not a valid value";
+    case "invalid_format":
+      return i.format === "email" ? "Enter a valid e-mail address" : i.format === "uuid" ? "Choose one from the list" : i.format === "date" ? "Enter a valid date" : "Not in the right format";
+    case "invalid_value":
+      return "Choose one of the options";
+    default:
+      // Our own rules (refine) already speak plainly.
+      return issue.message;
+  }
+}
 const listQuery = z.object({
   q: z.string().trim().max(100).optional(),
   status: z.string().max(30).optional(),
@@ -75,7 +100,7 @@ export function buildApp(db: Db, opts: { logger?: boolean; secureCookies?: boole
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ZodError) {
       const fields: Record<string, string> = {};
-      for (const issue of err.issues) fields[issue.path.join(".") || "_"] = issue.message;
+      for (const issue of err.issues) fields[issue.path.join(".") || "_"] = plainMessage(issue);
       return reply.status(400).send({ error: { code: "invalid", message: "Please check the highlighted fields", fields } });
     }
     if (err instanceof HttpError) {
@@ -216,6 +241,8 @@ export function buildApp(db: Db, opts: { logger?: boolean; secureCookies?: boole
   // ── Sales orders and jobs ──
   app.get(`${api}/sales-orders`, async (req) => so.listSalesOrders(db, ctxOf(req), parse(listQuery, req.query)));
   app.get(`${api}/sales-orders/:id`, async (req) => so.getSalesOrder(db, ctxOf(req), parse(idParam, req.params).id));
+  app.post(`${api}/sales-orders/:id/ship`, async (req) => so.shipOrder(db, ctxOf(req), parse(idParam, req.params).id, parse(so.shipSchema, req.body)));
+  app.post(`${api}/sales-orders/:id/status`, async (req) => so.setOrderStatus(db, ctxOf(req), parse(idParam, req.params).id, parse(so.orderStatusSchema, req.body)));
   app.post(`${api}/sales-order-lines/:id/jobs`, async (req, reply) =>
     reply.status(201).send(await jobsSvc.createJobFromOrderLine(db, ctxOf(req), parse(idParam, req.params).id)),
   );

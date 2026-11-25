@@ -574,3 +574,18 @@ maths (`packages/shared/src/packing.ts`) and wording. Supply → Packaging.
 Not built (on purpose, for now): packing on the true 3D shape (nesting concave parts, free-angle
 turning), poured bulk simulation, foam/tray design and CAD export of dunnage, mixed parts in one
 container, and truck loading of mixed pallets.
+
+## Orders follow their jobs; shipping (2026-11-25)
+
+- **Ready to ship:** an order changes by itself to *Ready to ship* once every line's jobs are
+  complete (cancelled jobs ignored), and back to *In production* if a job is reopened. Orders
+  finished earlier catch up when the server starts.
+- **Ship** on the order: quantity per line (what is left by default; partial deliveries are
+  fine), an optional note (carrier, tracking number), and a printable **packing slip** for the
+  delivery. When every line is fully shipped the order is *Shipped*; **Close order** closes it.
+- **Cancel order** (More menu) when nothing has shipped; its jobs that have not started are
+  cancelled too; an order with a running job must have that job finished or cancelled first.
+- **Shipping** in the menu lists the orders ready to ship.
+- Shop-floor fixes from the trial: the Close operation button stays in view on laptop
+  screens; a new quote's empty first line no longer blocks saving; form errors read in plain
+  words ("Required", "Must be more than 0") instead of the library's wording.

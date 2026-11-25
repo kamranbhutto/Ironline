@@ -133,13 +133,13 @@ const TONE: Record<string, string> = {
   late: "bg-bad-soft text-bad",
 };
 
-export function Status({ value }: { value: string }) {
+export function Status({ value, text }: { value: string; text?: string }) {
   const live = value === "in_progress" || value === "running" || value === "in_production";
   // Unknown statuses keep their own label in neutral grey.
   return (
     <span className={cx("inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium first-letter:uppercase", TONE[value] ?? TONE.draft)}>
       {live && <span className="h-1.5 w-1.5 rounded-full bg-live" aria-hidden />}
-      {label(value)}
+      {text ?? label(value)}
     </span>
   );
 }

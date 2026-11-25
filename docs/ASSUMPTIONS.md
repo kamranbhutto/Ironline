@@ -113,3 +113,6 @@ adapts.
     line fully picked (the same rule as the board's "Material not picked" mark). Setup, labor
     and machine timers are all blocked; later steps are not checked again. Outside services do
     not need picking.
+46. **Shipping does not take finished parts out of stock**: a job made for an order goes
+    straight to the customer, so only the order's shipped quantities change. Invoicing is not
+    built yet.

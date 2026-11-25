@@ -876,37 +876,42 @@ function CompletePanel({ d, setupSecs, laborSecs, machineSecs, canClose, busy, e
     </div>
   );
   return (
-    <div className="space-y-3 overflow-y-auto p-3">
-      <Section>
-        <Row label="Total to complete" value={num(d.job.quantity, 4)} />
-        <Row label="Quantity completed" value={`${num(d.operation.quantityGood, 4)} / ${num(d.job.quantity, 4)}`} blue />
-      </Section>
-      <Section>
-        <Row label="Picking" value={req ? `${Math.round((picked / req) * 100)}%` : "—"} blue />
-      </Section>
-      <Section>
-        <Row label="Rework" value={num(d.operation.quantityRework, 4)} />
-        <Row label="Scrap" value={num(d.operation.quantityScrap, 4)} />
-      </Section>
-      <Section>
-        <Row label="Setup" value={clock(setupSecs)} blue badge={<Over pct={setupPct} />} />
-        <Row label="Labor" value={clock(laborSecs)} blue badge={<Over pct={runPct} />} />
-        <Row label="Machine" value={clock(machineSecs)} blue />
-      </Section>
-      <ErrorNote error={error} />
-      <button
-        type="button"
-        disabled={!canClose || busy}
-        onClick={onClose}
-        title={canClose ? undefined : "Log time or parts first"}
-        className="h-14 w-full rounded-2xl bg-[#1f7ae0] text-lg font-semibold uppercase tracking-wide text-white shadow-sm transition hover:brightness-110 disabled:opacity-40"
-      >
-        Close operation
-      </button>
-      <section className="flex items-center justify-between gap-2 rounded-2xl bg-panel px-4 py-3 shadow-[0_2px_10px_rgba(23,34,48,0.07)]">
-        <span className="text-sm">Next operation:</span>
-        {next ? <span className="rounded-xl bg-[#23272e] px-4 py-2 text-sm font-medium text-white">{next.description || next.workCenterCode}</span> : <span className="font-medium">Last step: the job completes</span>}
-      </section>
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* The figures scroll; the button that closes the step stays in view on any screen. */}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+        <Section>
+          <Row label="Total to complete" value={num(d.job.quantity, 4)} />
+          <Row label="Quantity completed" value={`${num(d.operation.quantityGood, 4)} / ${num(d.job.quantity, 4)}`} blue />
+        </Section>
+        <Section>
+          <Row label="Picking" value={req ? `${Math.round((picked / req) * 100)}%` : "—"} blue />
+        </Section>
+        <Section>
+          <Row label="Rework" value={num(d.operation.quantityRework, 4)} />
+          <Row label="Scrap" value={num(d.operation.quantityScrap, 4)} />
+        </Section>
+        <Section>
+          <Row label="Setup" value={clock(setupSecs)} blue badge={<Over pct={setupPct} />} />
+          <Row label="Labor" value={clock(laborSecs)} blue badge={<Over pct={runPct} />} />
+          <Row label="Machine" value={clock(machineSecs)} blue />
+        </Section>
+        <section className="flex items-center justify-between gap-2 rounded-2xl bg-panel px-4 py-3 shadow-[0_2px_10px_rgba(23,34,48,0.07)]">
+          <span className="text-sm">Next operation:</span>
+          {next ? <span className="rounded-xl bg-[#23272e] px-4 py-2 text-sm font-medium text-white">{next.description || next.workCenterCode}</span> : <span className="font-medium">Last step: the job completes</span>}
+        </section>
+      </div>
+      <div className="shrink-0 space-y-2 border-t border-line p-3">
+        <ErrorNote error={error} />
+        <button
+          type="button"
+          disabled={!canClose || busy}
+          onClick={onClose}
+          title={canClose ? undefined : "Log time or parts first"}
+          className="h-14 w-full rounded-2xl bg-[#1f7ae0] text-lg font-semibold uppercase tracking-wide text-white shadow-sm transition hover:brightness-110 disabled:opacity-40"
+        >
+          Close operation
+        </button>
+      </div>
     </div>
   );
 }

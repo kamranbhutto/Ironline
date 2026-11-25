@@ -174,3 +174,8 @@ These came out of `docs/research/competitor-capabilities.md` and change the targ
 
 - `work_centers.at_planned_time` — `continue` (default), `stop` or `complete`: what a running
   timer does when the step's planned time is reached.
+
+## Order status (migration 0011)
+
+- `sales_orders.status` gains `ready` (all jobs finished, waiting to ship). Deliveries are
+  `events` with action `shipped` (lines and quantities, note) plus `sales_order_lines.quantity_shipped`.

@@ -6,6 +6,7 @@ import { badRequest, conflict, HttpError, notFound, type Ctx } from "../ctx.ts";
 import { consumeForJob, lotsForItems, returnFromJob } from "./inventory.ts";
 import { onJobComplete, openChildren } from "./subjobs.ts";
 import { logEvent } from "./common.ts";
+import { refreshOrderForJob } from "./salesOrders.ts";
 
 /** Everyone who works on the floor may use these; viewers may only look. */
 const FLOOR_ROLES = ["owner", "admin", "planner", "operator", "quality", "estimator"];
@@ -295,7 +296,10 @@ async function finishStep(tx: Tx, ctx: Ctx, opId: string, input: z.infer<typeof 
       await tx.update(jobs).set({ status: "in_progress", updatedAt: new Date() }).where(eq(jobs.id, job.id));
     }
     await logEvent(tx, ctx, "job", job.id, "operation_done", { operation: op.sequence, good: done!.quantityGood, scrap: done!.quantityScrap, next: next?.sequence });
-    if (allDone) await onJobComplete(tx, ctx, job.id);
+    if (allDone) {
+      await onJobComplete(tx, ctx, job.id);
+      await refreshOrderForJob(tx, ctx, job.id);
+    }
     return { nextOperationId: next?.id ?? null, jobComplete: allDone };
   }
 }

@@ -189,3 +189,59 @@ describe("tenant isolation", () => {
     expect(own.body.code).toBe("C-00001");
   });
 });
+
+describe("orders follow their jobs, ship and close", () => {
+  it("goes ready when the jobs finish, ships in parts, closes, and cancels only when nothing shipped", async () => {
+    const { call } = await shop(env.app);
+    const wc = await call("POST", "/work-centers", { code: "SAW", name: "Saw", hourlyRate: 50 });
+    const cust = await call("POST", "/customers", { name: "Ship Co" });
+    const q = await call("POST", "/quotes", { customerId: cust.body.id, lines: [
+      { description: "Pin", quantity: 10, operations: [{ workCenterId: wc.body.id, runHoursPerUnit: 0.01 }] },
+      { description: "Bush", quantity: 4, operations: [{ workCenterId: wc.body.id, runHoursPerUnit: 0.01 }] },
+    ] });
+    const o = await call("POST", `/quotes/${q.body.id}/convert`, { customerPo: "PO-1" });
+    let so = (await call("GET", `/sales-orders/${o.body.id}`)).body;
+    expect(so.status).toBe("in_production");
+    const [jobA, jobB] = so.lines.map((l: { jobs: { id: string }[] }) => l.jobs[0]!.id);
+    for (const j of [jobA, jobB]) await call("POST", `/jobs/${j}/status`, { status: "released" });
+
+    // Finish the first job on the floor: the order is not ready while the second is open.
+    const opA = (await call("GET", `/jobs/${jobA}`)).body.operations[0].id;
+    await call("POST", `/floor/operations/${opA}/complete`, { quantityGood: 10 });
+    expect((await call("GET", `/sales-orders/${o.body.id}`)).body.status).toBe("in_production");
+    // Finish the second by hand: now ready to ship.
+    await call("POST", `/jobs/${jobB}/status`, { status: "in_progress" });
+    await call("POST", `/jobs/${jobB}/status`, { status: "complete" });
+    so = (await call("GET", `/sales-orders/${o.body.id}`)).body;
+    expect(so.status).toBe("ready");
+    expect((await call("GET", "/sales-orders?status=open")).body.some((x: { id: string }) => x.id === so.id)).toBe(true);
+    // Reopening a job puts the order back in production; finishing it again makes it ready.
+    await call("POST", `/jobs/${jobB}/status`, { status: "in_progress" });
+    expect((await call("GET", `/sales-orders/${o.body.id}`)).body.status).toBe("in_production");
+    await call("POST", `/jobs/${jobB}/status`, { status: "complete" });
+    so = (await call("GET", `/sales-orders/${o.body.id}`)).body;
+    expect(so.status).toBe("ready");
+
+    // Ship part, then the rest.
+    const [lA, lB] = so.lines;
+    expect((await call("POST", `/sales-orders/${so.id}/ship`, { lines: [{ lineId: lA.id, quantity: 11 }] })).status).toBe(400);
+    so = (await call("POST", `/sales-orders/${so.id}/ship`, { lines: [{ lineId: lA.id, quantity: 6 }], note: "Truck 1" })).body;
+    expect(so.status).toBe("ready");
+    expect(so.lines[0].quantityShipped).toBe(6);
+    expect((await call("POST", `/sales-orders/${so.id}/status`, { status: "closed" })).status).toBe(409);
+    expect((await call("POST", `/sales-orders/${so.id}/status`, { status: "cancelled" })).status).toBe(409);
+    so = (await call("POST", `/sales-orders/${so.id}/ship`, { lines: [{ lineId: lA.id, quantity: 4 }, { lineId: lB.id, quantity: 4 }] })).body;
+    expect(so.status).toBe("shipped");
+    expect(so.log.filter((e: { action: string }) => e.action === "shipped")).toHaveLength(2);
+    expect((await call("POST", `/sales-orders/${so.id}/ship`, { lines: [{ lineId: lA.id, quantity: 1 }] })).status).toBe(409);
+    so = (await call("POST", `/sales-orders/${so.id}/status`, { status: "closed" })).body;
+    expect(so.status).toBe("closed");
+
+    // A new order with nothing started cancels, and takes its planned jobs with it.
+    const q2 = await call("POST", "/quotes", { customerId: cust.body.id, lines: [{ description: "Pin", quantity: 3, operations: [{ workCenterId: wc.body.id, runHoursPerUnit: 0.01 }] }] });
+    const o2 = await call("POST", `/quotes/${q2.body.id}/convert`, {});
+    const c2 = (await call("POST", `/sales-orders/${o2.body.id}/status`, { status: "cancelled" })).body;
+    expect(c2.status).toBe("cancelled");
+    expect(c2.lines[0].jobs[0].status).toBe("cancelled");
+  });
+});

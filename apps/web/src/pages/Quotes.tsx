@@ -59,6 +59,7 @@ type HeaderF = { customerId: string; contactId: string; validUntil: string; lead
 let keySeq = 0;
 const newKey = () => `l${++keySeq}`;
 const n = (s: string) => (s === "" ? 0 : Number(s));
+const isBlankLine = (l: LineF) => !l.itemId && !l.description.trim() && !l.operations.length && !l.materials.length && !l.unitPriceOverride;
 const emptyLine = (): LineF => ({ key: newKey(), itemId: "", description: "", quantity: "1", markupPct: "25", unitPriceOverride: "", operations: [], materials: [], open: true });
 const QUOTE_STAGES = [
   { key: "draft", label: "Draft" },
@@ -191,7 +192,13 @@ export function QuoteEditorPage() {
     if (!id) nav(`/quotes/${q.id}`, { replace: true });
   };
   const save = useMutation({
-    mutationFn: () => (id ? api<QuoteDetail>(`/quotes/${id}`, "PUT", toBody(header, lines)) : api<QuoteDetail>("/quotes", "POST", toBody(header, lines))),
+    mutationFn: () => {
+      // A line left completely empty (no part, description, steps or materials) is dropped, so the
+      // starting blank line never blocks saving; error numbers then match the lines still shown.
+      const kept = lines.filter((l) => !isBlankLine(l));
+      if (kept.length !== lines.length) setLines(kept.length ? kept : [emptyLine()]);
+      return id ? api<QuoteDetail>(`/quotes/${id}`, "PUT", toBody(header, kept)) : api<QuoteDetail>("/quotes", "POST", toBody(header, kept));
+    },
     onSuccess: done,
   });
   const act = useMutation({

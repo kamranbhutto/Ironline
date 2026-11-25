@@ -169,7 +169,7 @@ export function CustomerDetailPage() {
   const won = d.quotes.filter((q) => q.status === "won").length;
   const decided = d.quotes.filter((q) => q.status === "won" || q.status === "lost").length;
   const openQuotes = d.quotes.filter((q) => q.status === "draft" || q.status === "sent");
-  const openOrders = d.salesOrders.filter((o) => o.status === "confirmed" || o.status === "in_production");
+  const openOrders = d.salesOrders.filter((o) => o.status === "confirmed" || o.status === "in_production" || o.status === "ready");
   const lifetime = d.salesOrders.filter((o) => o.status !== "cancelled").reduce((a, o) => a + o.totalPrice, 0);
   const primary = d.contacts.find((x) => x.isPrimary);
 

@@ -73,7 +73,7 @@ packages/shared Validation schemas and shared maths (pricing, tolerances, purcha
 - Light and dark themes, phone and tablet layouts
 
 See `docs/FEATURES.md` for the full checklist and `docs/ROADMAP.md` for the order of work.
-Next: shipping, invoicing, non-conformance reports and nesting.
+Next: invoicing, non-conformance reports and nesting.
 
 ## Third-party notices
 STEP/IGES/BREP files are read in the browser by `occt-import-js` (LGPL-2.1, built on Open

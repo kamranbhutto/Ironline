@@ -20,7 +20,7 @@ export async function listCustomers(db: Db, ctx: Ctx, opts: { q?: string; status
       email: customers.email,
       phone: customers.phone,
       openQuotes: sql<number>`(select count(*)::int from quotes q where q.customer_id = "customers"."id" and q.status in ('draft','sent'))`,
-      openOrders: sql<number>`(select count(*)::int from sales_orders s where s.customer_id = "customers"."id" and s.status in ('confirmed','in_production'))`,
+      openOrders: sql<number>`(select count(*)::int from sales_orders s where s.customer_id = "customers"."id" and s.status in ('confirmed','in_production','ready'))`,
     })
     .from(customers)
     .where(and(...where))
