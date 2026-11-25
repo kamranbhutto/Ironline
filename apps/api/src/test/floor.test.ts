@@ -145,6 +145,16 @@ describe("shop floor", () => {
     // The second operation is not ready until the first is done.
     expect((await call("POST", `/floor/operations/${ops[1].id}/start`, { kind: "run" })).status).toBe(409);
 
+    // No timer (setup, labor or machine) on the first step until the material is picked.
+    for (const kind of ["setup", "labor", "run"]) {
+      const early = await call("POST", `/floor/operations/${ops[0].id}/start`, { kind });
+      expect(early.status).toBe(409);
+      expect(early.body.error.message).toContain("Pick the material before starting: Bar (0 of 10 picked)");
+    }
+    await call("POST", `/floor/materials/${mats[0].id}/pick`, { quantity: 4 });
+    expect((await call("POST", `/floor/operations/${ops[0].id}/start`, { kind: "setup" })).body.error.message).toContain("Bar (4 of 10 picked)");
+    await call("POST", `/floor/materials/${mats[0].id}/pick`, { quantity: 6 });
+
     const started = await call("POST", `/floor/operations/${ops[0].id}/start`, { kind: "setup" });
     expect(started.status).toBe(200);
     expect(started.body.openEntry.kind).toBe("setup");
@@ -160,8 +170,9 @@ describe("shop floor", () => {
     const done = await call("POST", `/floor/operations/${ops[0].id}/complete`, { quantityGood: 6 });
     expect(done.body).toEqual({ nextOperationId: ops[1].id, jobComplete: false });
 
-    const picked = await call("POST", `/floor/materials/${mats[0].id}/pick`, { quantity: 10 });
-    expect(picked.body.quantityIssued).toBe(10);
+    const picked = await call("POST", `/floor/materials/${mats[0].id}/pick`, { quantity: 0.5 });
+    expect(picked.body.quantityIssued).toBe(10.5);
+    await call("POST", `/floor/materials/${mats[0].id}/pick`, { quantity: -0.5 });
     expect((await call("POST", `/floor/materials/${mats[0].id}/pick`, { quantity: -20 })).status).toBe(400);
 
     const job = await call("GET", `/jobs/${jobId}`);
@@ -222,7 +233,8 @@ describe("files", () => {
 
   it("counts parts while the timer runs, sends parts to rework, and splits labor from machine time", async () => {
     const { call } = await shop(env.app);
-    const { jobId, ops } = await releasedJob(call);
+    const { jobId, ops, mats } = await releasedJob(call);
+    await call("POST", `/floor/materials/${mats[0].id}/pick`, { quantity: 10 });
     await call("POST", `/floor/operations/${ops[0].id}/start`, { kind: "labor" });
     const counted = await call("POST", `/floor/operations/${ops[0].id}/count`, { quantityGood: 3 });
     expect(counted.status).toBe(200);

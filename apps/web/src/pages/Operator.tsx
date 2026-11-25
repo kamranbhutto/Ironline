@@ -200,6 +200,10 @@ export function OperatorPage() {
   const hasWork = d.actual.setupSeconds + d.actual.runSeconds > 0 || d.operation.quantityGood > 0 || running;
   const busy = start.isPending || stop.isPending || count.isPending;
   const toggle = (s: Side) => setSide(side === s ? null : s);
+  // Work on the first step waits until all of the job's material is picked (the server checks too).
+  const firstStep = d.route[0]?.id === d.operation.id;
+  const unpicked = firstStep ? d.materials.filter((m) => m.kind === "material" && m.quantityIssued < m.quantityRequired) : [];
+  const needPick = unpicked.length > 0 && !running;
   const wcLink = d.workCenter ? `/floor?wc=${d.workCenter.id}` : "/floor";
   const stepChars = stepCharacteristics(insp.data, d.operation.sequence);
   const results = insp.data?.results ?? [];
@@ -296,7 +300,8 @@ export function OperatorPage() {
         </div>
         <button
           type="button"
-          disabled={!canWork || busy}
+          disabled={!canWork || busy || needPick}
+          title={needPick ? "Pick the material first" : undefined}
           onClick={() => (running ? stop.mutate() : start.mutate())}
           aria-label={running ? "Pause" : `Start ${MODES.find((m) => m.key === mode)!.label.toLowerCase()}`}
           className={cx(
@@ -313,6 +318,20 @@ export function OperatorPage() {
             <Play className="h-16 w-16 translate-x-1 fill-current" />
           )}
         </button>
+        {needPick && canWork && (
+          <div className="-mt-1 rounded-xl bg-[#ece8fb] px-2.5 py-2 text-xs text-[#4a3a9c]">
+            <div className="mb-1 font-semibold">Pick the material first</div>
+            {unpicked.map((m) => (
+              <div key={m.id} className="flex justify-between gap-2">
+                <span className="truncate">{m.description}</span>
+                <span className="num shrink-0">{num(m.quantityIssued, 3)} / {num(m.quantityRequired, 3)}</span>
+              </div>
+            ))}
+            <button type="button" onClick={() => setSide("pick")} className="mt-2 w-full rounded-lg bg-[#5b45b8] py-1.5 font-medium text-white hover:brightness-110">
+              Pick material
+            </button>
+          </div>
+        )}
         {running && <div className="num -mt-2 text-center text-sm text-muted">{clock((now - new Date(d.openEntry!.startedAt).getTime()) / 1000)} this session</div>}
         {running && atPlanned !== "continue" && (
           <p className="-mt-1 rounded-lg bg-accent-soft px-2 py-1 text-center text-xs text-accent">
@@ -782,7 +801,7 @@ function PickCard({ m, onPick, busy }: { m: OpView["materials"][number]; onPick:
               <div className="space-y-1.5 px-2 pb-2">
                 {m.lots.length ? (
                   m.lots.map((l, k) => (
-                    <div key={l.id} className={cx("flex items-center justify-between rounded-xl px-3 py-2.5 ring-1", k === 0 ? "bg-[#eaf2ff] ring-[#b9d1fb]" : "bg-panel ring-line")}>
+                    <div key={l.id} className={cx("flex items-center justify-between rounded-xl px-3 py-2.5 ring-1", k === 0 ? "bg-accent-soft ring-accent/50" : "bg-panel ring-line")}>
                       <span className="flex min-w-0 items-center gap-3">
                         <span className={cx("flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2", k === 0 ? "border-[#2f6fe4]" : "border-line")}>{k === 0 && <span className="h-3 w-3 rounded-full bg-[#2f6fe4]" />}</span>
                         <span className="min-w-0">

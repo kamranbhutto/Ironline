@@ -109,3 +109,7 @@ adapts.
     on that step. "Finish the step" counts the rest of the job's pieces good and readies the
     next step. The server checks every 15 seconds and whenever a floor screen loads, and ends
     the timer at the exact moment the plan ran out.
+45. **No work starts on a job's first step until its material is picked**: every raw-material
+    line fully picked (the same rule as the board's "Material not picked" mark). Setup, labor
+    and machine timers are all blocked; later steps are not checked again. Outside services do
+    not need picking.

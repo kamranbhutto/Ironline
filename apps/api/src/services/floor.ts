@@ -230,6 +230,18 @@ export async function startTimer(db: Db, ctx: Ctx, opId: string, kind: "setup" |
       if (waiting.length && op.status === "pending") throw conflict(`Waiting for the pieces: ${waiting.map((w) => w.number).join(", ")} must be finished first`);
       throw conflict(op.status === "done" ? "This operation is already complete" : "This operation is not ready yet — the previous step is still open");
     }
+    // Work cannot start on the job's first step until its material is picked: every material line
+    // fully issued (the same rule as the "Material not picked" mark on the board).
+    const [first] = await tx.select({ id: jobOperations.id }).from(jobOperations).where(eq(jobOperations.jobId, job.id)).orderBy(asc(jobOperations.sequence)).limit(1);
+    if (first?.id === op.id) {
+      const short = await tx
+        .select({ description: jobMaterials.description, required: jobMaterials.quantityRequired, issued: jobMaterials.quantityIssued })
+        .from(jobMaterials)
+        .where(and(eq(jobMaterials.jobId, job.id), eq(jobMaterials.kind, "material"), sql`${jobMaterials.quantityIssued} < ${jobMaterials.quantityRequired}`));
+      if (short.length) {
+        throw conflict(`Pick the material before starting: ${short.map((m) => `${m.description} (${m.issued} of ${m.required} picked)`).join(", ")}`);
+      }
+    }
     // One person may run several machines or jobs at once (each timer costs its own work
     // center). Only this person's open timer on this same operation is closed, e.g. when
     // switching from setup to run.
