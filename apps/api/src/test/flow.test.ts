@@ -245,3 +245,18 @@ describe("orders follow their jobs, ship and close", () => {
     expect(c2.lines[0].jobs[0].status).toBe("cancelled");
   });
 });
+
+describe("shipping at the same time", () => {
+  it("never ships more than ordered when two deliveries are recorded at once", async () => {
+    const { call } = await shop(env.app);
+    const wc = await call("POST", "/work-centers", { code: "SAW", name: "Saw", hourlyRate: 50 });
+    const cust = await call("POST", "/customers", { name: "Race Co" });
+    const q = await call("POST", "/quotes", { customerId: cust.body.id, lines: [{ description: "Pin", quantity: 10, operations: [{ workCenterId: wc.body.id, runHoursPerUnit: 0.01 }] }] });
+    const o = await call("POST", `/quotes/${q.body.id}/convert`, {});
+    const line = (await call("GET", `/sales-orders/${o.body.id}`)).body.lines[0];
+    const tries = await Promise.all(Array.from({ length: 4 }, () => call("POST", `/sales-orders/${o.body.id}/ship`, { lines: [{ lineId: line.id, quantity: 6 }] })));
+    expect(tries.filter((t) => t.status === 200)).toHaveLength(1);
+    const after = (await call("GET", `/sales-orders/${o.body.id}`)).body;
+    expect(after.lines[0].quantityShipped).toBe(6);
+  });
+});

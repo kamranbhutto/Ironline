@@ -145,10 +145,11 @@ export const shipSchema = z.object({
 export async function shipOrder(db: Db, ctx: Ctx, id: string, input: z.infer<typeof shipSchema>) {
   requireRole(ctx, EDITORS);
   await db.transaction(async (tx) => {
-    const [o] = await tx.select().from(salesOrders).where(and(eq(salesOrders.orgId, ctx.orgId), eq(salesOrders.id, id)));
+    // Lock the order and its lines so two people shipping at once cannot ship more than ordered.
+    const [o] = await tx.select().from(salesOrders).where(and(eq(salesOrders.orgId, ctx.orgId), eq(salesOrders.id, id))).for("update");
     if (!o) throw notFound("Sales order");
     if (!OPEN.includes(o.status)) throw conflict(`This order is ${o.status.replace("_", " ")}; it cannot be shipped`);
-    const lines = await tx.select().from(salesOrderLines).where(eq(salesOrderLines.salesOrderId, id));
+    const lines = await tx.select().from(salesOrderLines).where(eq(salesOrderLines.salesOrderId, id)).for("update");
     const shipped: { lineNo: number; quantity: number }[] = [];
     for (const s of input.lines) {
       const l = lines.find((x) => x.id === s.lineId);
@@ -174,9 +175,9 @@ export const orderStatusSchema = z.object({ status: z.enum(["closed", "cancelled
 export async function setOrderStatus(db: Db, ctx: Ctx, id: string, input: z.infer<typeof orderStatusSchema>) {
   requireRole(ctx, EDITORS);
   await db.transaction(async (tx) => {
-    const [o] = await tx.select().from(salesOrders).where(and(eq(salesOrders.orgId, ctx.orgId), eq(salesOrders.id, id)));
+    const [o] = await tx.select().from(salesOrders).where(and(eq(salesOrders.orgId, ctx.orgId), eq(salesOrders.id, id))).for("update");
     if (!o) throw notFound("Sales order");
-    const lines = await tx.select().from(salesOrderLines).where(eq(salesOrderLines.salesOrderId, id));
+    const lines = await tx.select().from(salesOrderLines).where(eq(salesOrderLines.salesOrderId, id)).for("update");
     if (input.status === "closed") {
       if (o.status !== "shipped") throw conflict("Ship the order before closing it");
     } else {
