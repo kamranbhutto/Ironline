@@ -99,3 +99,7 @@ adapts.
     included on both sides of the comparison.
 42. **The starter packaging library** is added the first time a shop opens Packaging; its
     prices are placeholders.
+43. **One person can run several jobs at once** (for example a cutter and an injection
+    press). Each timer costs its own work center's rate; starting a timer only replaces the
+    same person's timer on that same operation (setup → run). The operator screen lists the
+    person's other running jobs.

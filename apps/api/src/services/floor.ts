@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db, Tx } from "../db/client.ts";
 import { customers, items, jobMaterials, jobOperations, jobs, laborEntries, salesOrderLines, salesOrders, users, workCenters } from "../db/schema.ts";
@@ -166,6 +166,15 @@ export async function operationView(db: Db, ctx: Ctx, opId: string) {
       machineSeconds: Math.round(secs("run")),
     },
     openEntry: open,
+    // This person's timers running on other operations, so they can switch to them.
+    myOtherRunning: await db
+      .select({ operationId: jobOperations.id, jobNumber: jobs.number, workCenterCode: workCenters.code, kind: laborEntries.kind, startedAt: laborEntries.startedAt })
+      .from(laborEntries)
+      .innerJoin(jobOperations, eq(jobOperations.id, laborEntries.jobOperationId))
+      .innerJoin(jobs, eq(jobs.id, jobOperations.jobId))
+      .leftJoin(workCenters, eq(workCenters.id, jobOperations.workCenterId))
+      .where(and(eq(laborEntries.orgId, ctx.orgId), eq(laborEntries.userId, ctx.userId), isNull(laborEntries.endedAt), ne(laborEntries.jobOperationId, opId)))
+      .orderBy(asc(laborEntries.startedAt)),
     othersRunning: entries.filter((e) => !e.endedAt && e.userId !== ctx.userId).map((e) => e.userName),
     entries,
     // Each material with the lots it can be picked from (oldest first).
@@ -218,8 +227,10 @@ export async function startTimer(db: Db, ctx: Ctx, opId: string, kind: "setup" |
       if (waiting.length && op.status === "pending") throw conflict(`Waiting for the pieces: ${waiting.map((w) => w.number).join(", ")} must be finished first`);
       throw conflict(op.status === "done" ? "This operation is already complete" : "This operation is not ready yet — the previous step is still open");
     }
-    // One person runs one timer at a time: switching work stops the previous timer.
-    await closeOpen(tx, ctx, eq(laborEntries.userId, ctx.userId));
+    // One person may run several machines or jobs at once (each timer costs its own work
+    // center). Only this person's open timer on this same operation is closed, e.g. when
+    // switching from setup to run.
+    await closeOpen(tx, ctx, and(eq(laborEntries.userId, ctx.userId), eq(laborEntries.jobOperationId, opId)));
     await tx.insert(laborEntries).values({ orgId: ctx.orgId, jobOperationId: opId, userId: ctx.userId, kind, rate: op.rate });
     await tx.update(jobOperations).set({ status: "running" }).where(eq(jobOperations.id, opId));
     if (job.status === "released") await tx.update(jobs).set({ status: "in_progress", updatedAt: new Date() }).where(eq(jobs.id, job.id));

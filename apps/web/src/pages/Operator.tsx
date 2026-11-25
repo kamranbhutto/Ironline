@@ -63,6 +63,7 @@ type OpView = {
   salesOrderNumber: string | null;
   customerPo: string | null;
   estimate: { setupSeconds: number; runSeconds: number };
+  myOtherRunning: { operationId: string; jobNumber: string; workCenterCode: string | null; kind: string; startedAt: string }[];
   actual: { setupSeconds: number; runSeconds: number; laborSeconds: number; machineSeconds: number };
   openEntry: { id: string; kind: string; startedAt: string } | null;
   othersRunning: string[];
@@ -297,6 +298,17 @@ export function OperatorPage() {
         </button>
         {running && <div className="num -mt-2 text-center text-sm text-muted">{clock((now - new Date(d.openEntry!.startedAt).getTime()) / 1000)} this session</div>}
         {d.othersRunning.length > 0 && <p className="text-center text-xs text-muted">Also working: {d.othersRunning.join(", ")}</p>}
+        {d.myOtherRunning.length > 0 && (
+          <div className="rounded-xl bg-ok-soft px-2.5 py-2 text-xs">
+            <div className="mb-1 font-medium text-ok">Also running for you</div>
+            {d.myOtherRunning.map((r) => (
+              <Link key={r.operationId} to={`/floor/op/${r.operationId}`} className="block rounded px-1 py-0.5 hover:bg-panel">
+                <span className="block whitespace-nowrap font-medium">{r.jobNumber} · {r.workCenterCode ?? ""}</span>
+                <span className="num block text-muted">{MODES.find((m) => m.key === r.kind)?.label ?? r.kind} · {clock((now - new Date(r.startedAt).getTime()) / 1000)}</span>
+              </Link>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center gap-1.5">
           <RoundButton label="Count fewer at a time" onClick={() => setStep(Math.max(1, step - 1))}><ArrowDown className="h-5 w-5" /></RoundButton>

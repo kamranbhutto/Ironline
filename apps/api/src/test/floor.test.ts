@@ -29,6 +29,44 @@ async function releasedJob(call: Awaited<ReturnType<typeof shop>>["call"]) {
 }
 
 describe("shop floor", () => {
+  it("lets one person run jobs on two work centers at the same time", async () => {
+    const { call } = await shop(env.app);
+    const cut = await call("POST", "/work-centers", { code: "CUT", name: "Cutter", hourlyRate: 60 });
+    const inj = await call("POST", "/work-centers", { code: "INJ", name: "Injection molding", hourlyRate: 90 });
+    const cust = await call("POST", "/customers", { name: "Parallel Co" });
+    const release = async (wc: string) => {
+      const q = await call("POST", "/quotes", { customerId: cust.body.id, lines: [{ description: `Part on ${wc}`, quantity: 5, operations: [{ workCenterId: wc, runHoursPerUnit: 0.1 }] }] });
+      const o = await call("POST", `/quotes/${q.body.id}/convert`, {});
+      const so = await call("GET", `/sales-orders/${o.body.id}`);
+      const jobId = so.body.lines[0].jobs[0].id;
+      await call("POST", `/jobs/${jobId}/status`, { status: "released" });
+      return (await call("GET", `/jobs/${jobId}`)).body.operations[0].id as string;
+    };
+    const a = await release(cut.body.id);
+    const b = await release(inj.body.id);
+
+    await call("POST", `/floor/operations/${a}/start`, { kind: "run" });
+    const second = await call("POST", `/floor/operations/${b}/start`, { kind: "run" });
+    expect(second.status).toBe(200);
+    // Starting on INJ does not pause CUT: both run, and each screen lists the other.
+    const first = await call("GET", `/floor/operations/${a}`);
+    expect(first.body.openEntry).not.toBeNull();
+    expect(first.body.operation.status).toBe("running");
+    expect(first.body.myOtherRunning.map((r: { operationId: string }) => r.operationId)).toEqual([b]);
+    expect(second.body.myOtherRunning[0].workCenterCode).toBe("CUT");
+
+    // Switching kind on the same operation replaces that timer only.
+    await call("POST", `/floor/operations/${b}/start`, { kind: "labor" });
+    const again = await call("GET", `/floor/operations/${b}`);
+    expect(again.body.openEntry.kind).toBe("labor");
+    expect(again.body.entries.filter((e: { endedAt: string | null }) => !e.endedAt)).toHaveLength(1);
+    expect((await call("GET", `/floor/operations/${a}`)).body.openEntry).not.toBeNull();
+
+    // Stopping one leaves the other running.
+    await call("POST", `/floor/operations/${a}/stop`, {});
+    expect((await call("GET", `/floor/operations/${b}`)).body.openEntry).not.toBeNull();
+  });
+
   it("runs timers, records quantities, completes operations and costs the job", async () => {
     const { call } = await shop(env.app);
     const { jobId, ops, mats, mill } = await releasedJob(call);
