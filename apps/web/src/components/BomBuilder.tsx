@@ -5,6 +5,7 @@ import { api, type Item, type ItemDetail, type WorkCenter } from "../api.ts";
 import { money, num } from "../format.ts";
 import { PartThumb } from "./PartThumb.tsx";
 import { NewComponentModal, NewOperationModal } from "./QuickCreate.tsx";
+import { RunTimeInput, runTimeText } from "./RunTimeInput.tsx";
 import { Link } from "react-router";
 import { Button, cx } from "./ui.tsx";
 
@@ -114,7 +115,7 @@ function SubAssembly({ itemId, depth, seen, expandAll }: { itemId: string; depth
   if (seen.includes(itemId)) return <div className="ml-6 text-xs text-bad">This part contains itself — check its bill of material.</div>;
   return (
     <div className="ml-5 space-y-2 border-l-2 border-ok/40 pl-3">
-      <OpChain ops={d.data.routing.map((r) => ({ code: r.description || r.workCenterCode, title: `${r.workCenterCode} · setup ${r.setupHours} h · ${num(r.runHoursPerUnit * 60, 2)} min/pc` }))} />
+      <OpChain ops={d.data.routing.map((r) => ({ code: r.description || r.workCenterCode, title: `${r.workCenterCode} · setup ${r.setupHours} h · ${runTimeText(r.runHoursPerUnit)}/pc` }))} />
       {d.data.bom.map((b) => (
         <TreeRow key={b.id} itemId={b.componentItemId} partNumber={b.partNumber} description={b.description} type={b.type} qty={b.quantityPer} cost={b.unitCost * b.quantityPer * (1 + b.scrapPct / 100)} depth={depth + 1} seen={[...seen, itemId]} expandAll={expandAll} />
       ))}
@@ -299,15 +300,8 @@ export function BomBuilder(p: {
                     <input type="number" min={0} step="0.01" value={op.setupHours} onChange={(e) => setOp(sel, { setupHours: e.target.value })} className="num mt-1 w-full rounded-lg bg-panel px-2.5 py-2 text-sm ring-1 ring-line" />
                   </label>
                   <label className="block">
-                    <span className="text-xs text-muted">Run (minutes / piece)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={op.runHoursPerUnit === "" ? "" : String(Math.round(Number(op.runHoursPerUnit) * 60 * 10000) / 10000)}
-                      onChange={(e) => setOp(sel, { runHoursPerUnit: e.target.value === "" ? "" : String(Number(e.target.value) / 60) })}
-                      className="num mt-1 w-full rounded-lg bg-panel px-2.5 py-2 text-sm ring-1 ring-line"
-                    />
+                    <span className="text-xs text-muted">Run (per piece)</span>
+                    <RunTimeInput hours={op.runHoursPerUnit} onChange={(v) => setOp(sel, { runHoursPerUnit: v })} />
                   </label>
                 </div>
                 <div className="rounded-lg bg-panel px-3 py-2 text-xs text-muted ring-1 ring-line">
@@ -428,7 +422,7 @@ export function BomBuilder(p: {
 
           <OpChain
             tone="accent"
-            ops={p.routing.map((r) => ({ code: r.description || wc(r.workCenterId)?.code || "?", title: `${wc(r.workCenterId)?.code ?? ""} · setup ${r.setupHours || 0} h · ${num(Number(r.runHoursPerUnit || 0) * 60, 2)} min/pc` }))}
+            ops={p.routing.map((r) => ({ code: r.description || wc(r.workCenterId)?.code || "?", title: `${wc(r.workCenterId)?.code ?? ""} · setup ${r.setupHours || 0} h · ${runTimeText(Number(r.runHoursPerUnit || 0))}/pc` }))}
             selected={editing ? sel : null}
             onSelect={editing ? setSel : undefined}
             onAdd={editing ? () => (setLib("ops"), setSel(null)) : undefined}

@@ -157,6 +157,22 @@ describe("quote to job", () => {
     expect(job.body.estimatedCost).toBe(194); // (0.5 + 0.1 x 5) x 150 + 11 x 4
   });
 
+  it("keeps short cycle times exact from the part to the job", async () => {
+    const { call } = await shop(env.app);
+    const wc = await call("POST", "/work-centers", { code: "INJ", name: "Injection press", hourlyRate: 60 });
+    const oneSecond = 1 / 3600;
+    const part = await call("POST", "/items", { partNumber: "INS-1", description: "Insert", routing: [{ workCenterId: wc.body.id, setupHours: 0.2, runHoursPerUnit: oneSecond * 12 }] });
+    expect(part.body.routing[0].runHoursPerUnit * 3600).toBeCloseTo(12, 4); // was 11.88 s with 4 decimals
+    const cust = await call("POST", "/customers", { name: "Moulding customer" });
+    const q = await call("POST", "/quotes", { customerId: cust.body.id, lines: [{ itemId: part.body.id, description: "Insert", quantity: 1000 }] });
+    const order = await call("POST", `/quotes/${q.body.id}/convert`, { createJobs: false });
+    const so = await call("GET", `/sales-orders/${order.body.id}`);
+    const job = await call("POST", `/sales-order-lines/${so.body.lines[0].id}/jobs`);
+    expect(job.status).toBe(201);
+    const op = (await call("GET", `/jobs/${job.body.id}`)).body.operations[0];
+    expect(op.setupHours + op.runHoursPerUnit * 1000).toBeCloseTo(0.2 + 12000 / 3600, 3); // 3.53 h
+  });
+
   it("rejects parts that list themselves in their own BOM", async () => {
     const { call } = await shop(env.app);
     const p = await call("POST", "/items", { partNumber: "X1", description: "X" });

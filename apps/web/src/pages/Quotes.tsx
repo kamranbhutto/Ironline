@@ -6,6 +6,7 @@ import { priceLine, type LineCost } from "@ironline/shared";
 import { api, ApiError, qs, type Contact, type Customer, type Item, type ItemDetail, type QuoteDetail, type QuoteSummary, type WorkCenter } from "../api.ts";
 import { Box } from "lucide-react";
 import { FilesPanel, pollWhilePreparing, type FileRow } from "../components/Files.tsx";
+import { RunTimeInput } from "../components/RunTimeInput.tsx";
 import { useThumb } from "../thumbs.ts";
 import { Badge, Button, ButtonLink, Card, cx, DetailTitle, MetricCard, MoreMenu, ErrorNote, Field, InsetField, insetControl, Input, Loading, Modal, PageHeader, PillTabs, recordCard, SearchBox, Select, StageTimeline, Status, TabPanel, Table, Td, R, ListBar, ViewTabs } from "../components/ui.tsx";
 import { date, isPast, money, num } from "../format.ts";
@@ -517,7 +518,7 @@ function LineEditor(p: {
                       <th className="w-32 px-2 py-2 text-left font-medium">Work center</th>
                       <th className="px-2 py-2 text-left font-medium">Step</th>
                       <th className="w-20 px-2 py-2 text-right font-medium">Setup h</th>
-                      <th className="w-20 px-2 py-2 text-right font-medium">Run h / pc</th>
+                      <th className="w-32 px-2 py-2 text-right font-medium">Run / pc</th>
                       <th className="w-20 px-2 py-2 text-right font-medium">Rate</th>
                       <th className="w-28 px-2 py-2 text-right font-medium">Cost</th>
                       <th className="w-10" />
@@ -535,7 +536,7 @@ function LineEditor(p: {
                         </td>
                         <td className="px-2 py-1.5"><Input aria-label="Step" value={o.description} placeholder={p.workCenters.find((w) => w.id === o.workCenterId)?.name} onChange={(e) => setOp(j, { description: e.target.value })} className="py-1.5" /></td>
                         <td className="px-2 py-1.5"><Input aria-label="Setup hours" type="number" min={0} step="0.01" value={o.setupHours} onChange={(e) => setOp(j, { setupHours: e.target.value })} className="num py-1.5 text-right" /></td>
-                        <td className="px-2 py-1.5"><Input aria-label="Run hours per piece" type="number" min={0} step="0.001" value={o.runHoursPerUnit} onChange={(e) => setOp(j, { runHoursPerUnit: e.target.value })} className="num py-1.5 text-right" /></td>
+                        <td className="px-2 py-1.5"><RunTimeInput compact hours={o.runHoursPerUnit} onChange={(v) => setOp(j, { runHoursPerUnit: v })} /></td>
                         <td className="px-2 py-1.5"><Input aria-label="Hourly rate" type="number" min={0} step="0.01" placeholder={String(p.rates.get(o.workCenterId) ?? 0)} value={o.rate} onChange={(e) => setOp(j, { rate: e.target.value })} className="num py-1.5 text-right" /></td>
                         <td className="num px-2 py-1.5 text-right">{r ? money(r.operationCosts[j]) : "—"}</td>
                         <td className="px-1 py-1.5 text-right">

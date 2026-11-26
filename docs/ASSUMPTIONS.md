@@ -121,3 +121,7 @@ adapts.
     quote (freight is usually charged separately, as the default terms say). Studies saved before
     this change only have the total, which includes freight; re-save the study to split it.
     Packaging is added to cost before markup.
+48. **Run time per piece is typed in seconds or minutes** and kept as hours with 8 decimals, so
+    short cycles (injection moulding, punching) stay exact. Times saved before this change
+    were rounded to 4 decimals of an hour (12 s became 11.88 s); re-type them on the part to
+    make them exact. Jobs already created keep the time they were made with.

@@ -24,6 +24,8 @@ import {
 const money = (name: string) => numeric(name, { precision: 14, scale: 4, mode: "number" });
 const qty = (name: string) => numeric(name, { precision: 14, scale: 4, mode: "number" });
 const hrs = (name: string) => numeric(name, { precision: 10, scale: 4, mode: "number" });
+/** Run time per piece: 8 decimals of an hour, so cycles of a second or less stay exact. */
+const runHrs = (name: string) => numeric(name, { precision: 14, scale: 8, mode: "number" });
 const pct = (name: string) => numeric(name, { precision: 9, scale: 4, mode: "number" });
 
 const pk = () => uuid("id").primaryKey().defaultRandom();
@@ -250,7 +252,7 @@ export const routingOperations = pgTable(
       .references(() => workCenters.id),
     description: text("description"),
     setupHours: hrs("setup_hours").notNull().default(0),
-    runHoursPerUnit: hrs("run_hours_per_unit").notNull().default(0),
+    runHoursPerUnit: runHrs("run_hours_per_unit").notNull().default(0),
   },
   (t) => [index("routing_item").on(t.orgId, t.itemId)],
 );
@@ -348,7 +350,7 @@ export const quoteLineOperations = pgTable(
     workCenterId: uuid("work_center_id").references(() => workCenters.id),
     description: text("description"),
     setupHours: hrs("setup_hours").notNull().default(0),
-    runHoursPerUnit: hrs("run_hours_per_unit").notNull().default(0),
+    runHoursPerUnit: runHrs("run_hours_per_unit").notNull().default(0),
     rate: money("rate").notNull().default(0),
     cost: money("cost").notNull().default(0),
   },
@@ -479,7 +481,7 @@ export const jobOperations = pgTable(
     workCenterId: uuid("work_center_id").references(() => workCenters.id),
     description: text("description"),
     setupHours: hrs("setup_hours").notNull().default(0),
-    runHoursPerUnit: hrs("run_hours_per_unit").notNull().default(0),
+    runHoursPerUnit: runHrs("run_hours_per_unit").notNull().default(0),
     rate: money("rate").notNull().default(0),
     estimatedCost: money("estimated_cost").notNull().default(0),
     actualHours: hrs("actual_hours").notNull().default(0),

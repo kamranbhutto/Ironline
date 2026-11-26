@@ -185,3 +185,8 @@ These came out of `docs/research/competitor-capabilities.md` and change the targ
 - `quote_lines.packaging_per_unit` — packaging cost per part (box, inner packing, pallet share),
   added to the line's cost. Filled from `items.pack_spec.packagingPerPart` when a catalogue part
   is chosen.
+
+## Run time precision (migration 0013)
+
+- `run_hours_per_unit` on `routing_operations`, `quote_line_operations` and `job_operations`
+  is `numeric(14, 8)` so cycles of a second or less are kept exactly.

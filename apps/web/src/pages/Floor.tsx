@@ -3,6 +3,7 @@ import { Boxes, Hourglass, Package, Pause, Play, RefreshCw, Activity, Clock, Cir
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { api } from "../api.ts";
+import { runTimeText } from "../components/RunTimeInput.tsx";
 import { Button, Card, cx, ErrorNote, Input, Loading, PageHeader, Status } from "../components/ui.tsx";
 import { date, isPast, num } from "../format.ts";
 
@@ -162,6 +163,9 @@ export function BoardPage() {
                         <div className="mt-1.5 inline-flex items-center gap-1 rounded bg-[#ece8fb] px-1.5 py-0.5 text-[11px] text-[#5b45b8]"><Package className="h-3 w-3" aria-hidden /> Material not picked</div>
                       )}
                       <div className="num mt-1.5 text-xs">{hm(c.remainingHours)} left</div>
+                      <div className="num text-[11px] text-muted" title="Planned time: setup once, then run time for every piece">
+                        {num(c.setupHours, 2)} h setup + {num(c.quantity, 0)} × {runTimeText(c.runHoursPerUnit)}
+                      </div>
                       <div className="text-[11px] text-muted">Priority: {PRIORITY(c.priority)}</div>
                       <div className="num mt-1.5 flex justify-between gap-2 text-sm font-semibold">
                         <span className={cx("whitespace-nowrap", c.late && "text-bad")}>Due {shortDate(c.dueDate)}</span>
