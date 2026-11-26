@@ -81,3 +81,24 @@ describe("packaging", () => {
     expect((await call("PUT", `/items/${item.body.id}/packing`, { packL: 1, packW: 1, packH: 1, packWeight: 1, packSpec: { ...spec, perBox: 0 } })).status).toBe(400);
   });
 });
+
+describe("packaging on quotes", () => {
+  it("adds the packaging cost per part to the quote line", async () => {
+    const { call } = await shop(env.app);
+    const cust = await call("POST", "/customers", { name: "Packaging Co" });
+    const item = await call("POST", "/items", { partNumber: "PK-2", description: "Door" });
+    // The packing study keeps packaging apart from freight.
+    const saved = await call("PUT", `/items/${item.body.id}/packing`, { packL: 100, packW: 50, packH: 40, packWeight: 0.5, packSpec: { ...spec, packagingPerPart: 0.05, freightPerPart: 0.0212 } });
+    expect(saved.status).toBe(200);
+    expect((await call("GET", `/items/${item.body.id}`)).body.packSpec.packagingPerPart).toBe(0.05);
+
+    const line = { itemId: item.body.id, description: "PK-2 Door", quantity: 100, markupPct: 0, materials: [{ description: "Sheet", quantityPer: 1, unitCost: 2 }] };
+    const q = await call("POST", "/quotes", { customerId: cust.body.id, lines: [{ ...line, packagingPerUnit: 0.5 }] });
+    expect(q.status).toBe(201);
+    expect(q.body.lines[0]).toMatchObject({ packagingPerUnit: 0.5, unitCost: 2.5, totalCost: 250 });
+    // Without packaging the cost is material only.
+    const plain = await call("POST", "/quotes", { customerId: cust.body.id, lines: [line] });
+    expect(plain.body.lines[0]).toMatchObject({ packagingPerUnit: 0, unitCost: 2 });
+    expect((await call("POST", "/quotes", { customerId: cust.body.id, lines: [{ ...line, packagingPerUnit: -1 }] })).status).toBe(400);
+  });
+});

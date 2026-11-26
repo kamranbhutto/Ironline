@@ -106,6 +106,9 @@ export interface PackSpec {
   palletsPerLoad: number;
   partsPerLoad: number;
   costPerPart: number;
+  /** Box, inner packing and pallet share per part, without freight. Missing on studies saved before it existed. */
+  packagingPerPart?: number;
+  freightPerPart?: number;
   savedAt: string;
 }
 export interface PackAsset {
@@ -168,6 +171,7 @@ export interface QuoteDetail {
     quantity: number;
     markupPct: number;
     unitPriceOverride: number | null;
+  packagingPerUnit: number;
     unitPrice: number;
     totalPrice: number;
     operations: { workCenterId: string | null; description: string | null; setupHours: number; runHoursPerUnit: number; rate: number }[];

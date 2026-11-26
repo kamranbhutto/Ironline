@@ -91,7 +91,7 @@ if (existing) {
     contactId: northwind.ct.id,
     leadTimeDays: 15,
     lines: [
-      { itemId: hub.id, description: "DMW-1040 rev A — Drive hub", quantity: 50, markupPct: 30, operations: ops(hub), materials: [...mats(hub), { kind: "service", itemId: null, description: "Black anodize type II", quantityPer: 1, unitCost: 175, scrapPct: 0, perLot: true }] },
+      { itemId: hub.id, description: "DMW-1040 rev A — Drive hub", quantity: 50, markupPct: 30, packagingPerUnit: 0, operations: ops(hub), materials: [...mats(hub), { kind: "service", itemId: null, description: "Black anodize type II", quantityPer: 1, unitCost: 175, scrapPct: 0, perLot: true }] },
     ],
   });
   await changeQuoteStatus(db, ctx, q1.id, "send");
@@ -101,7 +101,7 @@ if (existing) {
     customerId: lakeside.c.id,
     contactId: lakeside.ct.id,
     leadTimeDays: 10,
-    lines: [{ itemId: cover.id, description: "DMW-2210 rev A — Enclosure cover", quantity: 120, markupPct: 28, operations: ops(cover), materials: mats(cover) }],
+    lines: [{ itemId: cover.id, description: "DMW-2210 rev A — Enclosure cover", quantity: 120, markupPct: 28, packagingPerUnit: 0, operations: ops(cover), materials: mats(cover) }],
   });
   await changeQuoteStatus(db, ctx, q2.id, "send");
 
@@ -114,7 +114,7 @@ if (existing) {
       {
         description: "Sensor bracket per drawing NW-883 rev C",
         quantity: 10,
-        markupPct: 35,
+        markupPct: 35, packagingPerUnit: 0,
         operations: [
           { workCenterId: wc.mill.id, description: "Two setups, 5 features", setupHours: 2, runHoursPerUnit: 0.35, rate: null },
           { workCenterId: wc.deburr.id, description: "Deburr", setupHours: 0, runHoursPerUnit: 0.1, rate: null },

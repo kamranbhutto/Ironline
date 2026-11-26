@@ -41,6 +41,14 @@ describe("priceLine", () => {
     expect(b!.unitPrice).toBeLessThan(a!.unitPrice);
   });
 
+  it("adds packaging for every piece", () => {
+    const r = priceLine({ ...line, quantity: 10, packagingPerUnit: 0.75 });
+    expect(r.packagingCost).toBe(7.5);
+    expect(r.totalCost).toBe(673.5); // 666 + 7.5
+    expect(r.unitCost).toBe(67.35);
+    expect(priceLine({ ...line, quantity: 10 }).packagingCost).toBe(0);
+  });
+
   it("rejects a zero quantity", () => {
     expect(() => priceLine({ ...line, quantity: 0 })).toThrow();
   });

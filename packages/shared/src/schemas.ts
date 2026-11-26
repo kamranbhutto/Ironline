@@ -133,6 +133,7 @@ export const quoteLineSchema = z.object({
   quantity: qty,
   markupPct: pct.default(25),
   unitPriceOverride: money.optional().nullable(),
+  packagingPerUnit: money.default(0),
   operations: z.array(quoteOperationSchema).max(100).default([]),
   materials: z.array(quoteMaterialSchema).max(100).default([]),
 });

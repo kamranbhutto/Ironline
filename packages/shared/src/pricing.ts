@@ -27,6 +27,8 @@ export interface LineInput {
   quantity: number;
   markupPct: number;
   unitPriceOverride?: number | null;
+  /** Packaging cost for one part (box, inner packing, pallet share), from the packing study or typed in. */
+  packagingPerUnit?: number;
   operations: OperationInput[];
   materials: MaterialInput[];
 }
@@ -36,6 +38,7 @@ export interface LineCost {
   laborCost: number;
   materialCost: number;
   serviceCost: number;
+  packagingCost: number;
   totalCost: number;
   unitCost: number;
   unitPrice: number;
@@ -76,7 +79,8 @@ export function priceLine(line: LineInput): LineCost {
   });
   const materialTotal = round(mat, 4);
   const serviceCost = round(svc, 4);
-  const totalCost = round(laborCost + materialTotal + serviceCost, 4);
+  const packagingCost = round(Math.max(0, line.packagingPerUnit ?? 0) * q, 4);
+  const totalCost = round(laborCost + materialTotal + serviceCost + packagingCost, 4);
   const unitCost = round(totalCost / q, 4);
   const unitPrice =
     line.unitPriceOverride != null
@@ -93,6 +97,7 @@ export function priceLine(line: LineInput): LineCost {
     laborCost,
     materialCost: materialTotal,
     serviceCost,
+    packagingCost,
     totalCost,
     unitCost,
     unitPrice,

@@ -53,14 +53,14 @@ export function QuotesPage() {
 
 type OpF = { workCenterId: string; description: string; setupHours: string; runHoursPerUnit: string; rate: string };
 type MatF = { kind: "material" | "service"; itemId: string; description: string; quantityPer: string; unitCost: string; scrapPct: string; perLot: boolean };
-type LineF = { key: string; itemId: string; description: string; quantity: string; markupPct: string; unitPriceOverride: string; operations: OpF[]; materials: MatF[]; open: boolean };
+type LineF = { key: string; itemId: string; description: string; quantity: string; markupPct: string; unitPriceOverride: string; packagingPerUnit: string; operations: OpF[]; materials: MatF[]; open: boolean };
 type HeaderF = { customerId: string; contactId: string; validUntil: string; leadTimeDays: string; notes: string; terms: string };
 
 let keySeq = 0;
 const newKey = () => `l${++keySeq}`;
 const n = (s: string) => (s === "" ? 0 : Number(s));
-const isBlankLine = (l: LineF) => !l.itemId && !l.description.trim() && !l.operations.length && !l.materials.length && !l.unitPriceOverride;
-const emptyLine = (): LineF => ({ key: newKey(), itemId: "", description: "", quantity: "1", markupPct: "25", unitPriceOverride: "", operations: [], materials: [], open: true });
+const isBlankLine = (l: LineF) => !l.itemId && !l.description.trim() && !l.operations.length && !l.materials.length && !l.unitPriceOverride && !l.packagingPerUnit;
+const emptyLine = (): LineF => ({ key: newKey(), itemId: "", description: "", quantity: "1", markupPct: "25", unitPriceOverride: "", packagingPerUnit: "", operations: [], materials: [], open: true });
 const QUOTE_STAGES = [
   { key: "draft", label: "Draft" },
   { key: "sent", label: "Sent to customer" },
@@ -77,6 +77,7 @@ function priced(line: LineF, rates: Map<string, number>): LineCost | null {
     quantity,
     markupPct: n(line.markupPct),
     unitPriceOverride: line.unitPriceOverride === "" ? null : n(line.unitPriceOverride),
+    packagingPerUnit: n(line.packagingPerUnit),
     operations: line.operations.map((o) => ({
       setupHours: n(o.setupHours),
       runHoursPerUnit: n(o.runHoursPerUnit),
@@ -100,6 +101,7 @@ function toBody(h: HeaderF, lines: LineF[]) {
       quantity: n(l.quantity),
       markupPct: n(l.markupPct),
       unitPriceOverride: l.unitPriceOverride === "" ? null : n(l.unitPriceOverride),
+      packagingPerUnit: n(l.packagingPerUnit),
       operations: l.operations.map((o) => ({
         workCenterId: o.workCenterId || null,
         description: o.description || null,
@@ -129,6 +131,7 @@ function fromQuote(q: QuoteDetail): { header: HeaderF; lines: LineF[] } {
       quantity: String(l.quantity),
       markupPct: String(l.markupPct),
       unitPriceOverride: l.unitPriceOverride == null ? "" : String(l.unitPriceOverride),
+      packagingPerUnit: l.packagingPerUnit ? String(l.packagingPerUnit) : "",
       // Read-only quotes cannot toggle lines (the form is disabled), so show them expanded.
       open: !["draft", "sent"].includes(q.status) || q.lines.length === 1,
       operations: l.operations.map((o) => ({ workCenterId: o.workCenterId ?? "", description: o.description ?? "", setupHours: String(o.setupHours), runHoursPerUnit: String(o.runHoursPerUnit), rate: String(o.rate) })),
@@ -220,8 +223,10 @@ export function QuoteEditorPage() {
     if (!itemId) return update(i, { itemId: "" });
     update(i, { itemId });
     const it = await api<ItemDetail>(`/items/${itemId}`);
+    const pack = it.packSpec ? it.packSpec.packagingPerPart ?? it.packSpec.costPerPart : null;
     update(i, {
       itemId,
+      packagingPerUnit: pack == null ? "" : String(pack),
       description: `${it.partNumber} rev ${it.revision} — ${it.description}`,
       operations: it.routing.map((r) => ({ workCenterId: r.workCenterId, description: r.description ?? "", setupHours: String(r.setupHours), runHoursPerUnit: String(r.runHoursPerUnit), rate: "" })),
       materials: it.bom.map((b) => ({ kind: b.type === "service" ? "service" : "material", itemId: b.componentItemId, description: `${b.partNumber} ${b.description}`, quantityPer: String(b.quantityPer), unitCost: String(b.unitCost), scrapPct: String(b.scrapPct), perLot: false })),
@@ -493,6 +498,7 @@ function LineEditor(p: {
             <Field label="Quantity"><Input type="number" min={0} step="any" value={line.quantity} onChange={(e) => onChange({ quantity: e.target.value })} /></Field>
             <Field label="Markup %"><Input type="number" step="0.5" value={line.markupPct} onChange={(e) => onChange({ markupPct: e.target.value })} /></Field>
             <Field label="Fixed unit price"><Input type="number" min={0} step="0.01" placeholder={r ? money(r.unitCost * (1 + n(line.markupPct) / 100)) : "From markup"} value={line.unitPriceOverride} onChange={(e) => onChange({ unitPriceOverride: e.target.value })} /></Field>
+            <Field label="Packaging / pc" hint={line.itemId ? "From the part's packing study" : "Box, inner packing, pallet"}><Input type="number" min={0} step="any" placeholder="0.00" value={line.packagingPerUnit} onChange={(e) => onChange({ packagingPerUnit: e.target.value })} /></Field>
           </div>
 
           <div>
@@ -604,6 +610,7 @@ function LineEditor(p: {
                 <dt className="text-muted">Labor & machine</dt><dd className="num text-right">{money(r.laborCost)}</dd>
                 <dt className="text-muted">Material</dt><dd className="num text-right">{money(r.materialCost)}</dd>
                 <dt className="text-muted">Outside services</dt><dd className="num text-right">{money(r.serviceCost)}</dd>
+                <dt className="text-muted">Packaging</dt><dd className="num text-right">{money(r.packagingCost)}</dd>
                 <dt className="font-medium">Cost</dt><dd className="num text-right font-medium">{money(r.totalCost)} <span className="text-xs text-muted">({money(r.unitCost)} / pc)</span></dd>
               </dl>
               <div>

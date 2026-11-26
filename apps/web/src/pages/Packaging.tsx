@@ -185,6 +185,8 @@ export function PackingStudio() {
             palletsPerLoad: o.load.pallets,
             partsPerLoad: o.partsPerLoad,
             costPerPart: o.rankCost,
+            packagingPerPart: Math.round((o.perPart.container + o.perPart.dunnage + o.perPart.pallet) * 10000) / 10000,
+            freightPerPart: o.perPart.freight,
             savedAt: new Date().toISOString(),
           }
         : undefined;

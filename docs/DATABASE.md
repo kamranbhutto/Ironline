@@ -179,3 +179,9 @@ These came out of `docs/research/competitor-capabilities.md` and change the targ
 
 - `sales_orders.status` gains `ready` (all jobs finished, waiting to ship). Deliveries are
   `events` with action `shipped` (lines and quantities, note) plus `sales_order_lines.quantity_shipped`.
+
+## Quote packaging (migration 0012)
+
+- `quote_lines.packaging_per_unit` — packaging cost per part (box, inner packing, pallet share),
+  added to the line's cost. Filled from `items.pack_spec.packagingPerPart` when a catalogue part
+  is chosen.

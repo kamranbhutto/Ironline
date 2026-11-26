@@ -24,6 +24,7 @@ plus our own additions), with status. ✅ built · 🔨 in progress · P2/P3/P4 
 | Feature | Status |
 |---|---|
 | Quotes with operations, materials, outside services, markup, price override | ✅ |
+| Packaging cost per part on each quote line, filled from the part's packing study | ✅ |
 | Live cost, margin, shop hours; price at other quantities | ✅ |
 | Quote from a catalogue part (routing + BOM filled in) | ✅ |
 | Send / lost / reopen / convert to sales order (partial lines) | ✅ |

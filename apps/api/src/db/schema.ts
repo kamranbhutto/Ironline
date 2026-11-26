@@ -325,6 +325,8 @@ export const quoteLines = pgTable(
     quantity: qty("quantity").notNull(),
     markupPct: pct("markup_pct").notNull().default(25),
     unitPriceOverride: money("unit_price_override"),
+    /** Packaging cost per part (box, inner packing, pallet share). */
+    packagingPerUnit: money("packaging_per_unit").notNull().default(0),
     unitCost: money("unit_cost").notNull().default(0),
     unitPrice: money("unit_price").notNull().default(0),
     totalPrice: money("total_price").notNull().default(0),

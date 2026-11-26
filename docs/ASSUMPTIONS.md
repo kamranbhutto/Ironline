@@ -116,3 +116,8 @@ adapts.
 46. **Shipping does not take finished parts out of stock**: a job made for an order goes
     straight to the customer, so only the order's shipped quantities change. Invoicing is not
     built yet.
+47. **Packaging on a quote is per part and excludes freight**: the packing study saves the box,
+    inner packing and pallet share apart from freight, and only the packaging part goes on the
+    quote (freight is usually charged separately, as the default terms say). Studies saved before
+    this change only have the total, which includes freight; re-save the study to split it.
+    Packaging is added to cost before markup.

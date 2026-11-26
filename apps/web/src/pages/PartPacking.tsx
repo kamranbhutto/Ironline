@@ -29,6 +29,8 @@ export function PartPacking({ itemId, spec, size }: { itemId: string; spec: Pack
     ["Pallet", `${spec.pallet.code} · ${num(spec.boxesPerPallet, 0)} containers, ${num(spec.partsPerPallet, 0)} parts`],
     ["Truck", `${spec.vehicle.code} · ${num(spec.palletsPerLoad, 0)} pallets, ${num(spec.partsPerLoad, 0)} parts`],
     ["Cost per part", money(spec.costPerPart, spec.costPerPart < 1 ? 4 : 2)],
+    ...(spec.packagingPerPart != null ? [["Packaging per part (goes on quotes)", money(spec.packagingPerPart, spec.packagingPerPart < 1 ? 4 : 2)] as [string, string]] : []),
+    ...(spec.freightPerPart != null ? [["Freight per part", money(spec.freightPerPart, spec.freightPerPart < 1 ? 4 : 2)] as [string, string]] : []),
   ];
   return (
     <div className="space-y-4">

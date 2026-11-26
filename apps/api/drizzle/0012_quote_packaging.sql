@@ -1,0 +1,1 @@
+ALTER TABLE "quote_lines" ADD COLUMN "packaging_per_unit" numeric(14, 4) DEFAULT 0 NOT NULL;

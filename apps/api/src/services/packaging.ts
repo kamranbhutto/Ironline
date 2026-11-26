@@ -114,6 +114,9 @@ const specSchema = z.object({
   palletsPerLoad: z.number().int().positive().max(1e5),
   partsPerLoad: z.number().int().positive().max(1e12),
   costPerPart: price,
+  /** Box, inner packing and pallet share for one part, without freight (used on quotes). */
+  packagingPerPart: price.optional(),
+  freightPerPart: price.optional(),
   savedAt: z.string().max(40),
 });
 export type PackSpec = z.infer<typeof specSchema>;

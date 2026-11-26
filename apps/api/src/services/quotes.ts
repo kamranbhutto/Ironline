@@ -116,6 +116,7 @@ async function writeLines(tx: Tx, ctx: Ctx, quoteId: string, lines: QuoteLineInp
         quantity: line.quantity,
         markupPct: line.markupPct,
         unitPriceOverride: line.unitPriceOverride ?? null,
+        packagingPerUnit: line.packagingPerUnit,
         unitCost: priced.unitCost,
         unitPrice: priced.unitPrice,
         totalPrice: priced.totalPrice,
